@@ -137,7 +137,7 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
         self._visibilities.append(S)
         self._grams.append(G)
 
-    def infer_parameters(self, fne=True):
+    def infer_parameters(self, fne=True, return_eigenvalues=False):
         """
         Estimate parameters given ingested data.
 
@@ -202,7 +202,10 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
             N_eig = max(int(np.ceil((len(D_all) + len(D_all_neg)) / N_data)), self._N_level)
             intervals = np.append(intervals, [[np.finfo("f").min, 0]], axis=0)
 
-        return N_eig, intervals
+        if (return_eigenvalues):
+            return D_all, N_eig, intervals
+        else:
+            return N_eig, intervals
 
     
 class SensitivityFieldParameterEstimator(ParameterEstimator):
