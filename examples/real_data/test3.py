@@ -1,8 +1,5 @@
 """
 Script using pythons argparse to run bipp on real data sets. 
-
-Outstanding questions:
-What exactly does time slice do - do we require for it to be non 1 ????
 """
 
 import argparse
@@ -27,10 +24,13 @@ import bipp.measurement_set as measurement_set
 import time as tt
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from matplotlib.colors import TwoSlopeNorm
+import matplotlib.colors #import TwoSlopeNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-#"Eg:\npython realData.py [telescope name(string)] [path_to_ms(string)] [output_name(string)] [N_pix(int)] [FoV(float(deg))] [N_levels(int)] [Clustering(bool/list_of_eigenvalue_bin_edges)] [partitions] [WSCleangrid(bool)] [WSCleanPath(string)]"))
+from colorsys import hls_to_rgb
+plt.rcParams.update({'font.size': 26})
 
+
+################################################################################################################################################################################
 start_time= tt.time()
 ################################################################################################################################################################################
 ############################################ INPUT ####################################################################################################################################
@@ -87,8 +87,9 @@ if (args.telescope.lower()=="skalow"):
 elif (args.telescope.lower()=="mwa"):
     ms = measurement_set.MwaMeasurementSet(args.ms_file)
     N_station, N_antenna = 128, 128
-    #N_station, N_antenna = 58, 58
-
+    #N_station, N_antenna = 58, 58 # MeerKAT MERGHERS pilot measurement set files
+    #N_station, N_antenna = 14,14 # WSRT measurement set file
+    #N_station, N_antenna = 100, 100 # test3.py mwa /work/ska/redundantArray/redundantArray_10m.ms. -o redundantArray -n 1024 -f 1.1377777777777778 -l 1 -b True 2>&1 |tee redundantArrayImaging.log
 elif (args.telescope.lower()=="lofar"):
     N_station, N_antenna = 37, 37 # netherlands, 52 international
     ms = measurement_set.LofarMeasurementSet(args.ms_file, N_station = N_station, station_only=True)
@@ -96,7 +97,7 @@ elif (args.telescope.lower()=="lofar"):
 else: 
     raise(NotImplementedError("A measurement set class for the telescope you are searching for has not been implemented yet - please feel free to implement the class yourself!"))
 
-
+print (f"N_station:{N_station} , N_antenna:{N_antenna}")
 if (args.output==None):
     args.output = "test"
 
@@ -171,7 +172,7 @@ print (f"Telescope Name:{args.telescope}")
 print (f"MS file:{args.ms_file}")
 print (f"Output Name:{args.output}")
 print (f"N_Pix:{args.npix} pixels")
-print (f"FoV:{args.fov} deg")
+print (f"FoV:{np.rad2deg(args.fov)} deg")
 print (f"N_level:{args.nlevel} levels")
 print(f"Clustering Bool:{clusteringBool}")
 kmeans="kmeans"
@@ -188,7 +189,7 @@ print (f"Partitions:{args.partition}")
 ##############################################################################################################
 
 # Column Name: Column in MS file to be imaged (DATA is usually uncalibrated, CORRECTED_DATA is calibrated and MODEL_DATA contains WSClean model output)
-#args.column = "CORRECTED_DATA"
+#args.column = "MODEL_DATA"
 
 # IF USING WSCLEAN IMAGE GRID: sampling wrt WSClean grid
 # 1 means the output will have same number of pixels as WSClean image
@@ -211,14 +212,8 @@ filter_negative_eigenvalues= True
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([1,2])
-# 1 is lsq
-# 2 is levels
-# 3 is WSClean
-# 4 is WSClean v/s lsq comparison
-
-# 1 2 and 3 are on the same figure - we can remove 2 and 3 from this figure also
-# 4 is on a different figure with 1 and 2
+plotList= np.array([1,])
+# 1 is Gram Matrix plotted via imshow
 
 
 #######################################################################################################################################################
@@ -305,13 +300,14 @@ I_est = bb_pe.IntensityFieldParameterEstimator(args.nlevel, sigma=1, ctx=ctx)
 #for t, f, S, uvw_t in ProgressBar(
 for t, f, S in ProgressBar(
         #ms.visibilities(channel_id=[channel_id], time_id=slice(timeStart, timeEnd, 1), column=args.column, return_UVW = True)
-        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 30), column=args.column)
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
 ):
     wl = constants.speed_of_light / f.to_value(u.Hz)
     XYZ = ms.instrument(t)
 
     W = ms.beamformer(XYZ, wl)
     G = gram(XYZ, W, wl)
+
     S, _ = measurement_set.filter_data(S, W)
     I_est.collect(S, G)
     num_time_steps +=1
@@ -319,7 +315,17 @@ for t, f, S in ProgressBar(
 print (f"Number of time steps: {num_time_steps}")
 Eigs, N_eig, intensity_intervals = I_est.infer_parameters(return_eigenvalues=True)
 
+if (1 in plotList):
+    print ("Saving Gram Matrix")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    gramScale = ax.imshow(np.abs(G.data)+ np.min(np.nonzero(G.data))/2, norm = matplotlib.colors.LogNorm())
+    ax.set_title("Redundant Array Gram Matrix")
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(gramScale, cax)
+    cbar.set_label('Magnitude', rotation=270, labelpad=40)
 
+    fig.savefig(f"{args.output}_Gram")
 
 
 if (clusteringBool == False):
@@ -332,6 +338,7 @@ print (f"Parameter Estimator takes: {tt.time() - pe_t} s")
 # Imaging ########################################################################################
 ########################################################################################
 im_t = tt.time()
+
 print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ IMAGING @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n")
 imager = bipp.NufftSynthesis(
     ctx,
@@ -360,6 +367,7 @@ for t, f, S in ProgressBar(
     #uvw = frame.reshape_and_scale_uvw(wl, UVW_baselines_t)
     UVW_baselines_t = ms.instrument.baselines(t, uvw=True, field_center=ms.field_center)
     uvw = frame.reshape_and_scale_uvw(wl, UVW_baselines_t)
+    print (uvw.shape)
 
     if np.allclose(S.data, np.zeros(S.data.shape)):
         continue
@@ -372,12 +380,19 @@ else:
     I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel + 1, lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
 print("lsq_image.shape =", lsq_image.shape)
 
+I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
+
+I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2], lsq_image.shape[-1]).sum(axis = 0), xyz_grid)
+I_lsq_eq_summed.to_fits(f"{args.output}.fits")
+
 if (std_img_flag):
     std_image = imager.get("STD").reshape((-1, args.npix, args.npix))
     if (filter_negative_eigenvalues):
         I_std_eq = s2image.Image(std_image.reshape(args.nlevel, std_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
     else:
         I_std_eq = s2image.Image(std_image.reshape(args.nlevel + 1, std_image.shape[-2], std_image.shape[-1]), xyz_grid)
+
+    
     print("std_image.shape =", std_image.shape)
 
 print (f"Imaging takes :{tt.time() - im_t} s")
@@ -389,12 +404,8 @@ print (f"Imaging takes :{tt.time() - im_t} s")
 pf_t = tt.time()
 
 lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
-hdu_lsqlvls = fits.ImageHDU(lsq_levels)
 
 lsq_image = lsq_levels.sum(axis = 0)
-hdu_lsq =fits.PrimaryHDU(lsq_image)
-
-hdul = fits.HDUList([hdu_lsq, hdu_lsqlvls])
 
 fig, ax = plt.subplots(1, args.nlevel+1)
 
@@ -403,13 +414,8 @@ if (std_img_flag):
     fig, ax = plt.subplots(2, args.nlevel+1)
 
     std_levels = I_std_eq.data  # Nlevel, Npix, Npix
-    hdu_stdlvls = fits.ImageHDU(std_levels)
 
     std_image = std_levels.sum(axis = 0)
-    hdu_std = fits.ImageHDU(std_image)
-    
-    hdul.append(hdu_std)
-    hdul.append(hdu_stdlvls)
 
     # Plot Std Summed Image
     stdScale = ax[1,0].imshow(std_image)
@@ -450,8 +456,6 @@ for i in np.arange(args.nlevel):
     cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
 
 fig.savefig(f"{args.output}.png")
-
-hdul.writeto(f"{args.output}.fits", overwrite=True)
 
 print (f"Plotting and fits output time:{tt.time() - pf_t} s")
 print (f"Total time: {tt.time()- start_time} s")
