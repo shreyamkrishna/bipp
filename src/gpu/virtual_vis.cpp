@@ -37,7 +37,7 @@ auto virtual_vis(ContextInternal& ctx, std::size_t nFilter, const BippFilter* fi
     V = VUnbeamBuffer.get();
     ldv = nAntenna;
   }
-  // V is alwayts of shape (nAntenna, nEig) from here on
+  // V is always of shape (nAntenna, nEig) from here on
 
   auto VMulDBuffer = queue.create_device_buffer<api::ComplexType<T>>(nEig * nAntenna);
 

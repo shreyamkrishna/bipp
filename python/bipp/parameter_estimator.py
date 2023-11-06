@@ -171,6 +171,8 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
             )
 
         D_all = np.zeros((N_data, N_eig_max))
+        D_all_neg = np.zeros((N_data, N_eig_max))
+        
         for i, (S, G) in enumerate(zip(self._visibilities, self._grams)):
             # Remove broken BEAM_IDs
             broken_row_id = np.flatnonzero(
