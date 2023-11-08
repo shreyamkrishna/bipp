@@ -86,10 +86,10 @@ if (args.telescope.lower()=="skalow"):
 
 elif (args.telescope.lower()=="mwa"):
     ms = measurement_set.MwaMeasurementSet(args.ms_file)
-    #N_station, N_antenna = 128, 128
+    N_station, N_antenna = 128, 128
     #N_station, N_antenna = 58, 58 # MeerKAT MERGHERS pilot measurement set files
     #N_station, N_antenna = 14,14 # WSRT measurement set file
-    N_station, N_antenna = 100, 100 # test3.py mwa /work/ska/redundantArray/redundantArray_10m.ms. -o redundantArray -n 1024 -f 1.1377777777777778 -l 1 -b True 2>&1 |tee redundantArrayImaging.log
+    #N_station, N_antenna = 100, 100 # test3.py mwa /work/ska/redundantArray/redundantArray_10m.ms. -o redundantArray -n 1024 -f 1.1377777777777778 -l 1 -b True 2>&1 |tee redundantArrayImaging.log
 elif (args.telescope.lower()=="lofar"):
     N_station, N_antenna = 37, 37 # netherlands, 52 international
     ms = measurement_set.LofarMeasurementSet(args.ms_file, N_station = N_station, station_only=True)
