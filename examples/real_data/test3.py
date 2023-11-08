@@ -84,6 +84,11 @@ if (args.telescope.lower()=="skalow"):
     ms=measurement_set.SKALowMeasurementSet(args.ms_file)
     N_station, N_antenna = 512, 512
 
+elif (args.telescope.lower()=="redundant"):
+    ms=measurement_set.GenericMeasurementSet(args.ms_file)
+    _, N_station = ms.instrument(returnAntennaNumber=True)
+    N_antenna = N_station
+
 elif (args.telescope.lower()=="mwa"):
     ms = measurement_set.MwaMeasurementSet(args.ms_file)
     N_station, N_antenna = 128, 128

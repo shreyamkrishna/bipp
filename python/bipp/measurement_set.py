@@ -702,7 +702,7 @@ class GenericMeasurementSet(MeasurementSet):
         super().__init__(file_name)
 
     @property
-    def instrument(self, returnAntennaNumber=False):
+    def instrument(self):
         """
         Returns
         -------
@@ -733,11 +733,14 @@ class GenericMeasurementSet(MeasurementSet):
             XYZ = instrument.InstrumentGeometry(xyz=cfg.values, ant_idx=cfg.index)
 
             self._instrument = instrument.EarthBoundInstrumentGeometryBlock(XYZ)
-
-        if (returnAntennaNumber)
-            return self._instrument, len(station_mean)
-        else:
             return self._instrument
+        
+    def returnAntennaNumber(self):
+        "Returns number of stations present in MS file"
+        query = f"select POSITION from {self._msf}::ANTENNA"
+        table = ct.taql(query)
+        station_mean = table.getcol("POSITION")
+        return len(station_mean)
 
 
 
