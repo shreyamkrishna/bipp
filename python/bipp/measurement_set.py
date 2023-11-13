@@ -699,6 +699,7 @@ class GenericMeasurementSet(MeasurementSet):
         file_name : str
             Name of the MS file.
         """
+        self._nstation = None
         super().__init__(file_name)
 
     @property
@@ -733,14 +734,19 @@ class GenericMeasurementSet(MeasurementSet):
             XYZ = instrument.InstrumentGeometry(xyz=cfg.values, ant_idx=cfg.index)
 
             self._instrument = instrument.EarthBoundInstrumentGeometryBlock(XYZ)
-            return self._instrument
+        return self._instrument
         
-    def returnAntennaNumber(self):
-        "Returns number of stations present in MS file"
+    def AntennaNumber(self):
+        """
+        Returns 
+        -------
+        Number of stations present in MS file (int)
+        """
         query = f"select POSITION from {self._msf}::ANTENNA"
         table = ct.taql(query)
         station_mean = table.getcol("POSITION")
-        return len(station_mean)
+        self._nstation = len(station_mean)
+        return self._nstation
 
 
 

@@ -86,7 +86,7 @@ if (args.telescope.lower()=="skalow"):
 
 elif (args.telescope.lower()=="redundant"):
     ms=measurement_set.GenericMeasurementSet(args.ms_file)
-    _, N_station = ms.instrument(returnAntennaNumber=True)
+    N_station = ms.AntennaNumber()
     N_antenna = N_station
 
 elif (args.telescope.lower()=="mwa"):
@@ -217,7 +217,7 @@ filter_negative_eigenvalues= True
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([1,])
+plotList= np.array([1,2,])
 # 1 is Gram Matrix plotted via imshow
 
 
@@ -331,6 +331,19 @@ if (1 in plotList):
     cbar.set_label('Magnitude', rotation=270, labelpad=40)
 
     fig.savefig(f"{args.output}_Gram")
+
+if (2 in plotList):
+    print (f"Saving beamforming matrix. min:{np.min(np.nonzero(W.data))/2}")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    beamformingScale = ax.imshow(np.abs(W.data) + np.min(np.nonzero(W.data))/2, norm= matplotlib.colors.LogNorm(), cmap='cubehelix')
+    ax.set_title("Beamforming Matrix") 
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(gramScale, cax)
+    cbar.set_label('Magnitude', rotation=270, labelpad=40)
+
+    fig.savefig(f"{args.output}_Beamforming")
+
 
 
 if (clusteringBool == False):
