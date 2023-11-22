@@ -1,0 +1,2 @@
+casacore
+pyrap

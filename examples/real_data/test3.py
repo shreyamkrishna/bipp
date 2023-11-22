@@ -27,7 +27,7 @@ import matplotlib.cm as cm
 import matplotlib.colors #import TwoSlopeNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from colorsys import hls_to_rgb
-plt.rcParams.update({'font.size': 26})
+#plt.rcParams.update({'font.size': 26})
 
 
 ################################################################################################################################################################################
@@ -202,14 +202,14 @@ print (f"Partitions:{args.partition}")
 sampling = 1
 
 # error tolerance for FFT
-eps = 1e-3
+eps = 1e-7
 
 #precision of calculation
-precision = 'single'
+precision = 'double'
 
 # Create context with selected processing unit.
 # Options are "AUTO", "CPU" and "GPU".
-ctx = bipp.Context("AUTO")
+ctx = bipp.Context("GPU")
 
 filter_tuple = ['lsq','std'] # might need to make this a list
 
@@ -217,7 +217,7 @@ filter_negative_eigenvalues= True
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([1,2,])
+plotList= np.array([3,])
 # 1 is Gram Matrix plotted via imshow
 
 
@@ -288,6 +288,9 @@ opt.set_collect_group_size(None)
 opt.set_local_image_partition(bipp.Partition.grid([args.partition,args.partition,1]))
 opt.set_local_uvw_partition(bipp.Partition.grid([args.partition,args.partition,1]))
 
+#opt.set_local_image_partition(bipp.Partition.auto())
+#opt.set_local_uvw_partition(bipp.Partition.auto())
+
 print("N_pix = ", args.npix)
 print("precision = ", precision)
 print("Proc = ", ctx.processing_unit)
@@ -305,7 +308,7 @@ I_est = bb_pe.IntensityFieldParameterEstimator(args.nlevel, sigma=1, ctx=ctx)
 #for t, f, S, uvw_t in ProgressBar(
 for t, f, S in ProgressBar(
         #ms.visibilities(channel_id=[channel_id], time_id=slice(timeStart, timeEnd, 1), column=args.column, return_UVW = True)
-        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 50), column=args.column)
 ):
     wl = constants.speed_of_light / f.to_value(u.Hz)
     XYZ = ms.instrument(t)
@@ -344,6 +347,21 @@ if (2 in plotList):
 
     fig.savefig(f"{args.output}_Beamforming")
 
+if (3 in plotList):
+    print ("Saving Eigenvalue Histogram")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    
+    ax.hist(np.log10(Eigs), bins=25)
+    ax.set_title("Eigenvalue Histogram")
+    ax.set_xlabel(r'$log_{10}(\lambda_{a})$')
+    ax.set_ylabel("Count")
+    eigenvalue_binEdges = np.sort(np.unique(np.array(intensity_intervals))) [1:-1]  # select all but first and last bin edge (0 and 3e34)
+
+    for eigenvalue_binEdge in eigenvalue_binEdges:
+        ax.axvline(np.log10(eigenvalue_binEdge), color="r")
+
+    fig.tight_layout()
+    fig.savefig(f"{args.output}_EigHist.png")
 
 
 if (clusteringBool == False):
@@ -425,11 +443,11 @@ lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
 
 lsq_image = lsq_levels.sum(axis = 0)
 
-fig, ax = plt.subplots(1, args.nlevel+1)
+fig, ax = plt.subplots(1, args.nlevel+1, figsize = (20*(args.nlevel+1), 20))
 
 if (std_img_flag):
 
-    fig, ax = plt.subplots(2, args.nlevel+1)
+    fig, ax = plt.subplots(2, args.nlevel+1, figsize=(20*(args.nlevel + 1), 40))
 
     std_levels = I_std_eq.data  # Nlevel, Npix, Npix
 
@@ -443,6 +461,8 @@ if (std_img_flag):
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
     cbar = plt.colorbar(stdScale, cax)
     cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+    cbar.formatter.set_powerlimits((0, 0))
+    cbar.formatter.set_useMathText(True)
 
     # Plot Std Level Images  
     for i in np.arange(args.nlevel):
@@ -453,6 +473,8 @@ if (std_img_flag):
         cax = divider.append_axes("right", size = "5%", pad = 0.05)
         cbar = plt.colorbar(stdScale, cax)
         cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+        cbar.formatter.set_powerlimits((0, 0))
+        cbar.formatter.set_useMathText(True)
 
 # Plot Lsq Summed Image    
 lsqScale = ax[0, 0].imshow(lsq_image)
@@ -462,6 +484,8 @@ divider = make_axes_locatable(ax[0, 0])
 cax = divider.append_axes("right", size = "5%", pad = 0.05)
 cbar = plt.colorbar(lsqScale, cax)
 cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+cbar.formatter.set_powerlimits((0, 0))
+cbar.formatter.set_useMathText(True)
 
 # Plot Lsq Level Image
 for i in np.arange(args.nlevel):
@@ -472,6 +496,8 @@ for i in np.arange(args.nlevel):
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
     cbar = plt.colorbar(lsqScale, cax)
     cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+    cbar.formatter.set_powerlimits((0, 0))
+    cbar.formatter.set_useMathText(True)
 
 fig.savefig(f"{args.output}.png")
 
