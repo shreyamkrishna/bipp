@@ -1,8 +1,5 @@
 """
 Script using pythons argparse to run bipp on real data sets. 
-
-Outstanding questions:
-What exactly does time slice do - do we require for it to be non 1 ????
 """
 
 import argparse
@@ -27,10 +24,13 @@ import bipp.measurement_set as measurement_set
 import time as tt
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from matplotlib.colors import TwoSlopeNorm
+import matplotlib.colors #import TwoSlopeNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-#"Eg:\npython realData.py [telescope name(string)] [path_to_ms(string)] [output_name(string)] [N_pix(int)] [FoV(float(deg))] [N_levels(int)] [Clustering(bool/list_of_eigenvalue_bin_edges)] [partitions] [WSCleangrid(bool)] [WSCleanPath(string)]"))
+from colorsys import hls_to_rgb
+#plt.rcParams.update({'font.size': 26})
 
+
+################################################################################################################################################################################
 start_time= tt.time()
 ################################################################################################################################################################################
 ############################################ INPUT ####################################################################################################################################
@@ -84,13 +84,17 @@ if (args.telescope.lower()=="skalow"):
     ms=measurement_set.SKALowMeasurementSet(args.ms_file)
     N_station, N_antenna = 512, 512
 
+elif (args.telescope.lower()=="redundant"):
+    ms=measurement_set.GenericMeasurementSet(args.ms_file)
+    N_station = ms.AntennaNumber()
+    N_antenna = N_station
+
 elif (args.telescope.lower()=="mwa"):
     ms = measurement_set.MwaMeasurementSet(args.ms_file)
-    #N_station, N_antenna = 128, 128
-    #N_station, N_antenna = 58, 58
-    N_station, N_antenna = 14,14
-    
-
+    N_station, N_antenna = 128, 128
+    #N_station, N_antenna = 58, 58 # MeerKAT MERGHERS pilot measurement set files
+    #N_station, N_antenna = 14,14 # WSRT measurement set file
+    #N_station, N_antenna = 100, 100 # test3.py mwa /work/ska/redundantArray/redundantArray_10m.ms. -o redundantArray -n 1024 -f 1.1377777777777778 -l 1 -b True 2>&1 |tee redundantArrayImaging.log
 elif (args.telescope.lower()=="lofar"):
     N_station, N_antenna = 37, 37 # netherlands, 52 international
     ms = measurement_set.LofarMeasurementSet(args.ms_file, N_station = N_station, station_only=True)
@@ -198,14 +202,14 @@ print (f"Partitions:{args.partition}")
 sampling = 1
 
 # error tolerance for FFT
-eps = 1e-3
+eps = 1e-7
 
 #precision of calculation
-precision = 'single'
+precision = 'double'
 
 # Create context with selected processing unit.
 # Options are "AUTO", "CPU" and "GPU".
-ctx = bipp.Context("AUTO")
+ctx = bipp.Context("GPU")
 
 filter_tuple = ['lsq','std'] # might need to make this a list
 
@@ -213,14 +217,8 @@ filter_negative_eigenvalues= True
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([1])
-# 1 is lsq
-# 2 is levels
-# 3 is WSClean
-# 4 is WSClean v/s lsq comparison
-
-# 1 2 and 3 are on the same figure - we can remove 2 and 3 from this figure also
-# 4 is on a different figure with 1 and 2
+plotList= np.array([3,])
+# 1 is Gram Matrix plotted via imshow
 
 
 #######################################################################################################################################################
@@ -290,6 +288,9 @@ opt.set_collect_group_size(None)
 opt.set_local_image_partition(bipp.Partition.grid([args.partition,args.partition,1]))
 opt.set_local_uvw_partition(bipp.Partition.grid([args.partition,args.partition,1]))
 
+#opt.set_local_image_partition(bipp.Partition.auto())
+#opt.set_local_uvw_partition(bipp.Partition.auto())
+
 print("N_pix = ", args.npix)
 print("precision = ", precision)
 print("Proc = ", ctx.processing_unit)
@@ -307,13 +308,14 @@ I_est = bb_pe.IntensityFieldParameterEstimator(args.nlevel, sigma=1, ctx=ctx)
 #for t, f, S, uvw_t in ProgressBar(
 for t, f, S in ProgressBar(
         #ms.visibilities(channel_id=[channel_id], time_id=slice(timeStart, timeEnd, 1), column=args.column, return_UVW = True)
-        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 50), column=args.column)
 ):
     wl = constants.speed_of_light / f.to_value(u.Hz)
     XYZ = ms.instrument(t)
 
     W = ms.beamformer(XYZ, wl)
     G = gram(XYZ, W, wl)
+
     S, _ = measurement_set.filter_data(S, W)
     I_est.collect(S, G)
     num_time_steps +=1
@@ -321,7 +323,45 @@ for t, f, S in ProgressBar(
 print (f"Number of time steps: {num_time_steps}")
 Eigs, N_eig, intensity_intervals = I_est.infer_parameters(return_eigenvalues=True)
 
+if (1 in plotList):
+    print ("Saving Gram Matrix")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    gramScale = ax.imshow(np.abs(G.data)+ np.min(np.nonzero(G.data))/2, norm = matplotlib.colors.LogNorm(), cmap='cubehelix')
+    ax.set_title("Redundant Array Gram Matrix")
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(gramScale, cax)
+    cbar.set_label('Magnitude', rotation=270, labelpad=40)
 
+    fig.savefig(f"{args.output}_Gram")
+
+if (2 in plotList):
+    print (f"Saving beamforming matrix. min:{np.min(np.nonzero(W.data))/2}")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    beamformingScale = ax.imshow(np.abs(W.data) + np.min(np.nonzero(W.data))/2, norm= matplotlib.colors.LogNorm(), cmap='cubehelix')
+    ax.set_title("Beamforming Matrix") 
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(gramScale, cax)
+    cbar.set_label('Magnitude', rotation=270, labelpad=40)
+
+    fig.savefig(f"{args.output}_Beamforming")
+
+if (3 in plotList):
+    print ("Saving Eigenvalue Histogram")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    
+    ax.hist(np.log10(Eigs), bins=25)
+    ax.set_title("Eigenvalue Histogram")
+    ax.set_xlabel(r'$log_{10}(\lambda_{a})$')
+    ax.set_ylabel("Count")
+    eigenvalue_binEdges = np.sort(np.unique(np.array(intensity_intervals))) [1:-1]  # select all but first and last bin edge (0 and 3e34)
+
+    for eigenvalue_binEdge in eigenvalue_binEdges:
+        ax.axvline(np.log10(eigenvalue_binEdge), color="r")
+
+    fig.tight_layout()
+    fig.savefig(f"{args.output}_EigHist.png")
 
 
 if (clusteringBool == False):
@@ -334,6 +374,7 @@ print (f"Parameter Estimator takes: {tt.time() - pe_t} s")
 # Imaging ########################################################################################
 ########################################################################################
 im_t = tt.time()
+
 print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ IMAGING @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n")
 imager = bipp.NufftSynthesis(
     ctx,
@@ -402,11 +443,11 @@ lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
 
 lsq_image = lsq_levels.sum(axis = 0)
 
-fig, ax = plt.subplots(1, args.nlevel+1)
+fig, ax = plt.subplots(1, args.nlevel+1, figsize = (20*(args.nlevel+1), 20))
 
 if (std_img_flag):
 
-    fig, ax = plt.subplots(2, args.nlevel+1)
+    fig, ax = plt.subplots(2, args.nlevel+1, figsize=(20*(args.nlevel + 1), 40))
 
     std_levels = I_std_eq.data  # Nlevel, Npix, Npix
 
@@ -420,6 +461,8 @@ if (std_img_flag):
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
     cbar = plt.colorbar(stdScale, cax)
     cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+    cbar.formatter.set_powerlimits((0, 0))
+    cbar.formatter.set_useMathText(True)
 
     # Plot Std Level Images  
     for i in np.arange(args.nlevel):
@@ -430,6 +473,8 @@ if (std_img_flag):
         cax = divider.append_axes("right", size = "5%", pad = 0.05)
         cbar = plt.colorbar(stdScale, cax)
         cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+        cbar.formatter.set_powerlimits((0, 0))
+        cbar.formatter.set_useMathText(True)
 
 # Plot Lsq Summed Image    
 lsqScale = ax[0, 0].imshow(lsq_image)
@@ -439,6 +484,8 @@ divider = make_axes_locatable(ax[0, 0])
 cax = divider.append_axes("right", size = "5%", pad = 0.05)
 cbar = plt.colorbar(lsqScale, cax)
 cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+cbar.formatter.set_powerlimits((0, 0))
+cbar.formatter.set_useMathText(True)
 
 # Plot Lsq Level Image
 for i in np.arange(args.nlevel):
@@ -449,6 +496,8 @@ for i in np.arange(args.nlevel):
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
     cbar = plt.colorbar(lsqScale, cax)
     cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+    cbar.formatter.set_powerlimits((0, 0))
+    cbar.formatter.set_useMathText(True)
 
 fig.savefig(f"{args.output}.png")
 
