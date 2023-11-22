@@ -218,7 +218,7 @@ time_end = -1
 time_slice = 1
 
 # channel
-#channel_id = np.array([0], dtype = np.int64)
+#channel_id = np.array([4], dtype = np.int64)
 #channel_id = np.array([4,5], dtype = np.int64)
 channel_id = np.arange(64, dtype = np.int32)
 
@@ -528,8 +528,8 @@ if (telescope_name.lower() =="mwa"):
         cbar.set_label('Flux (K)', rotation=270, labelpad=40)
 
         residual_image = lsq_image-WSClean_image
-        #residual_norm = TwoSlopeNorm(vcenter=0, vmin=residual_image.min(), vmax=residual_image.max())
-        residualScale= ax[0, 2].imshow(residual_image, cmap = "RdBu_r")#, norm=residual_norm)
+        residual_norm = TwoSlopeNorm(vcenter=0, vmin=residual_image.min(), vmax=residual_image.max())
+        residualScale= ax[0, 2].imshow(residual_image, cmap = "RdBu_r", norm=residual_norm)
         ax[0, 2].set_title("Residual Image")
         ax[0, 2].axis('off')
         divider = make_axes_locatable(ax[0, 2])
