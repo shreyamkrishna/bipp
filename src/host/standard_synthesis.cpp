@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <complex>
 #include <limits>
+#include <cassert>
 
 #include "bipp/bipp.h"
 #include "bipp/config.h"
@@ -36,7 +37,7 @@ StandardSynthesis<T>::StandardSynthesis(std::shared_ptr<ContextInternal> ctx, st
                                         std::size_t nBeam, std::size_t nIntervals,
                                         std::size_t nFilter, const BippFilter* filter,
                                         std::size_t nPixel, const T* pixelX, const T* pixelY,
-                                        const T* pixelZ)
+                                        const T* pixelZ, const bool filter_negative_eigenvalues)
     : ctx_(std::move(ctx)),
       nIntervals_(nIntervals),
       nFilter_(nFilter),
@@ -61,7 +62,7 @@ template <typename T>
 auto StandardSynthesis<T>::collect(std::size_t nEig, T wl, const T* intervals,
                                    std::size_t ldIntervals, const std::complex<T>* s,
                                    std::size_t lds, const std::complex<T>* w, std::size_t ldw,
-                                   const T* xyz, std::size_t ldxyz) -> void {
+                                   const T* xyz, std::size_t ldxyz, const std::size_t nz_vis) -> void {
   auto v = Buffer<std::complex<T>>(ctx_->host_alloc(), nBeam_ * nEig);
   auto vUnbeam = Buffer<std::complex<T>>(ctx_->host_alloc(), nAntenna_ * nEig);
   auto unlayeredStats = Buffer<T>(ctx_->host_alloc(), nPixel_ * nEig);
@@ -74,11 +75,8 @@ auto StandardSynthesis<T>::collect(std::size_t nEig, T wl, const T* intervals,
   center_vector(nAntenna_, xyz + ldxyz, xyzCentered.get() + nAntenna_);
   center_vector(nAntenna_, xyz + 2 * ldxyz, xyzCentered.get() + 2 * nAntenna_);
 
-  {
-    auto g = Buffer<std::complex<T>>(ctx_->host_alloc(), nBeam_ * nBeam_);
 
-    gram_matrix<T>(*ctx_, nAntenna_, nBeam_, w, ldw, xyzCentered.get(), nAntenna_, wl, g.get(),
-                   nBeam_);
+  auto g = Buffer<std::complex<T>>(ctx_->host_alloc(), nBeam_ * nBeam_);
 
     // Note different order of s and g input
     if (s)
@@ -108,7 +106,7 @@ auto StandardSynthesis<T>::collect(std::size_t nEig, T wl, const T* intervals,
 
       auto imgCurrent = img_.get() + (idxFilter * nIntervals_ + idxInt) * nPixel_;
       for (std::size_t idxEig = start; idxEig < start + size; ++idxEig) {
-        const auto scale = dFiltered.get()[idxEig];
+        const auto scale = nz_vis > 0 ? dFiltered.get()[idxEig] / nz_vis : dFiltered.get()[idxEig];
         auto unlayeredStatsCurrent = unlayeredStats.get() + nPixel_ * idxEig;
 
         constexpr auto maxInt = static_cast<std::size_t>(std::numeric_limits<int>::max());

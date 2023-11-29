@@ -360,7 +360,9 @@ if (3 in plotList):
 
     for eigenvalue_binEdge in eigenvalue_binEdges:
         ax.axvline(np.log10(eigenvalue_binEdge), color="r")
-    fig.savefig(f"{args.output}_EigHistogram.pdf")
+
+    fig.tight_layout()
+    fig.savefig(f"{args.output}_EigHist.png")
 
 
 if (clusteringBool == False):

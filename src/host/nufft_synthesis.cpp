@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <vector>
+#include <cassert>
 
 #include "bipp/config.h"
 #include "bipp/exceptions.hpp"
@@ -35,7 +36,8 @@ template <typename T>
 NufftSynthesis<T>::NufftSynthesis(std::shared_ptr<ContextInternal> ctx, NufftSynthesisOptions opt,
                                   std::size_t nAntenna, std::size_t nBeam, std::size_t nIntervals,
                                   std::size_t nFilter, const BippFilter* filter, std::size_t nPixel,
-                                  const T* lmnX, const T* lmnY, const T* lmnZ)
+                                  const T* lmnX, const T* lmnY, const T* lmnZ,
+                                  const bool filter_negative_eigenvalues)
     : ctx_(std::move(ctx)),
       opt_(std::move(opt)),
       nIntervals_(nIntervals),
@@ -96,7 +98,7 @@ template <typename T>
 auto NufftSynthesis<T>::collect(std::size_t nEig, T wl, const T* intervals, std::size_t ldIntervals,
                                 const std::complex<T>* s, std::size_t lds, const std::complex<T>* w,
                                 std::size_t ldw, const T* xyz, std::size_t ldxyz, const T* uvw,
-                                std::size_t lduvw) -> void {
+                                std::size_t lduvw, const std::size_t nz_vis) -> void {
   // store coordinates
   std::memcpy(uvwX_.get() + collectCount_ * nAntenna_ * nAntenna_, uvw,
               sizeof(T) * nAntenna_ * nAntenna_);
@@ -104,9 +106,11 @@ auto NufftSynthesis<T>::collect(std::size_t nEig, T wl, const T* intervals, std:
               sizeof(T) * nAntenna_ * nAntenna_);
   std::memcpy(uvwZ_.get() + collectCount_ * nAntenna_ * nAntenna_, uvw + 2 * lduvw,
               sizeof(T) * nAntenna_ * nAntenna_);
-
+  
   auto v = Buffer<std::complex<T>>(ctx_->host_alloc(), nBeam_ * nEig);
   auto d = Buffer<T>(ctx_->host_alloc(), nEig);
+
+  char range = filter_negative_eigenvalues_ ? 'V' : 'A';
 
   {
     auto g = Buffer<std::complex<T>>(ctx_->host_alloc(), nBeam_ * nBeam_);
@@ -126,7 +130,7 @@ auto NufftSynthesis<T>::collect(std::size_t nEig, T wl, const T* intervals, std:
   virtual_vis(*ctx_, nFilter_, filter_.get(), nIntervals_, intervals, ldIntervals, nEig, d.get(),
               nAntenna_, v.get(), nBeam_, nBeam_, w, ldw, virtVisPtr,
               nMaxInputCount_ * nIntervals_ * nAntenna_ * nAntenna_,
-              nMaxInputCount_ * nAntenna_ * nAntenna_, nAntenna_);
+              nMaxInputCount_ * nAntenna_ * nAntenna_, nAntenna_, nz_vis);
 
   ++collectCount_;
   ++totalCollectCount_;
