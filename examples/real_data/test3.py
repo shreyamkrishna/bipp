@@ -213,15 +213,8 @@ filter_negative_eigenvalues= True
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([1])
-# 1 is lsq
-# 2 is levels
-# 3 is WSClean
-# 4 is WSClean v/s lsq comparison
-
-# 1 2 and 3 are on the same figure - we can remove 2 and 3 from this figure also
-# 4 is on a different figure with 1 and 2
-
+plotList= np.array([3,])
+# 1 is Gram Matrix plotted via imshow
 
 #######################################################################################################################################################
 # Observation set up ########################################################################################
@@ -320,7 +313,47 @@ for t, f, S in ProgressBar(
 
 Eigs, N_eig, intensity_intervals = I_est.infer_parameters(return_eigenvalues=True)
 
+if (1 in plotList):
+    print ("Saving Gram Matrix")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    gramScale = ax.imshow(np.abs(G.data)+ np.min(np.nonzero(G.data))/2, norm =LogNorm(), cmap='cubehelix')
+    ax.set_title("Gram Matrix")
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(gramScale, cax)
+    cbar.set_label('Magnitude', rotation=270, labelpad=40)
+    fig.tight_layout()
+    fig.savefig(f"{args.output}_Gram.pdf")
+    np.save(f"{args.output}_gram", G.data)
 
+if (2 in plotList):
+    print (f"Saving beamforming matrix. min:{np.min(np.nonzero(W.data))/2}")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    beamformingScale = ax.imshow(np.abs(W.data) + np.min(np.nonzero(W.data))/2, norm= LogNorm(), cmap='cubehelix')
+    ax.set_title("Beamforming Matrix") 
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(gramScale, cax)
+    cbar.set_label('Magnitude', rotation=270, labelpad=40)
+    fig.tight_layout()
+    fig.savefig(f"{args.output}_Beamforming.pdf")
+    np.save(f"{args.output}_W", W.data)
+
+if (3 in plotList):
+    print ("Saving Eigenvalue Histogram")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+    histOutput, bins = ax.hist(np.log10(Eigs), log=True, bins = 25) # modify this so that we can see if there is data 
+    ax.set_title("Eigenvalue Histogram")
+    ax.set_xlabel(r'$log_{10}(\lambda_{a})$')
+    ax.set_ylabel("Count")
+    
+    eigenvalue_binEdges = np.sort(np.unique(np.array(intensity_intervals))) [1:-1]  # select all but first and last bin edge (0 and 3e34)
+
+    for eigenvalue_binEdge in eigenvalue_binEdges:
+        ax.axvline(np.log10(eigenvalue_binEdge), color="r")
+
+    fig.tight_layout()
+    fig.savefig(f"{args.output}+_EigHist.png")
 
 
 if (clusteringBool == False):
