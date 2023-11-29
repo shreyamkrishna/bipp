@@ -137,16 +137,20 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
         self._visibilities.append(S)
         self._grams.append(G)
 
-    def infer_parameters(self):
+    def infer_parameters(self, return_eigenvalues=False):
         """
         Estimate parameters given ingested data.
 
         Returns
+            D_all: numpy.array
+                (N_eig) non zero eigenvalues
             N_eig : int
                 Number of eigenpairs to use.
 
-        cluster_intervals : :py:class:`~numpy.ndarray`
-            (N_level,2) intensity field cluster intervals.
+            cluster_intervals : :py:class:`~numpy.ndarray`
+                (N_level,2) intensity field cluster intervals.
+            
+            
         """
         N_data = len(self._visibilities)
         N_beam = N_eig_max = self._visibilities[0].shape[0]

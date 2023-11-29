@@ -212,7 +212,7 @@ ctx = bipp.Context("GPU") ## use this to compare two gram matrices one from cpu 
 
 filter_tuple = ['lsq','std'] # might need to make this a list
 
-filter_negative_eigenvalues= True
+filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
@@ -319,7 +319,7 @@ for t, f, S in ProgressBar(
     num_time_steps +=1
 
 print (f"Number of time steps: {num_time_steps}")
-Eigs, N_eig, intensity_intervals = I_est.infer_parameters(fne=False,return_eigenvalues=True)
+Eigs, N_eig, intensity_intervals = I_est.infer_parameters(return_eigenvalues=True)
 
 if (1 in plotList):
     print ("Saving Gram Matrix")
@@ -346,6 +346,21 @@ if (2 in plotList):
     fig.tight_layout()
     fig.savefig(f"{args.output}_Beamforming.pdf")
     np.save(f"{args.output}_W", W.data)
+
+if (3 in plotList):
+    print (f"Saving Eigenvalue Histogram.")
+    fig, ax = plt.subplots(1,1, figsize=(20,20))
+
+    histArray, bins = ax.hist(np.log10(Eigs), bins=25)
+    ax.set_title("Eigenvalue Histogram")
+    ax.set_xlabel(r'$log_{10}(\lambda_{a})$')
+    ax.set_ylabel("Count")
+    
+    eigenvalue_binEdges = np.sort(np.unique(np.array(intensity_intervals))) [1:-1]  # select all but first and last bin edge (0 and 3e34)
+
+    for eigenvalue_binEdge in eigenvalue_binEdges:
+        ax.axvline(np.log10(eigenvalue_binEdge), color="r")
+    fig.savefig(f"{args.output}_EigHistogram.pdf")
 
 
 if (clusteringBool == False):
