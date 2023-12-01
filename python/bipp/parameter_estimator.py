@@ -151,10 +151,12 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
         self._visibilities.append(S)
         self._grams.append(G)
 
-    def infer_parameters(self, return_eigenvalues=False):
+    def infer_parameters(self, fne: bool=True, return_eigenvalues=False):
         """
         Estimate parameters given ingested data.
-
+        Args
+            fne : bool
+                Filter negative eigenvalues (default is True to only keep positive ones)
         Returns
             D_all: numpy.array
                 (N_eig) non zero eigenvalues
@@ -179,9 +181,7 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
         
         for i, (S, G) in enumerate(zip(self._visibilities, self._grams)):
             # Remove broken BEAM_IDs
-            broken_row_id = np.flatnonzero(
-                np.isclose(np.sum(S.data, axis=0), np.sum(S.data, axis=1))
-            )
+            broken_row_id = np.flatnonzero(np.isclose(np.sum(S.data, axis=0), 0))
             working_row_id = list(set(np.arange(N_beam)) - set(broken_row_id))
             idx = np.ix_(working_row_id, working_row_id)
             S, G = S.data[idx], G.data[idx]
@@ -191,11 +191,17 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
                 _, D, _ = bipp.pybipp.eigh(self._ctx, S.data.shape[0], S.data, G.data)
                 # only consider positive eigenvalues, since we apply the log function for clustering
                 D = D[D > 0.0]
-                idx = np.clip(np.cumsum(D) / np.sum(D), 0, 1) <= self._sigma
-                D = D[idx]
-                D_all[i, : len(D)] = D
-
-        D_all= D_all[D_all.nonzero()]
+                if fne:
+                    D = D[np.argsort(D)[::-1]]
+                    idx = np.clip(np.cumsum(D) / np.sum(D), 0, 1) <= self._sigma
+                    D = D[idx]
+                    D = D[np.argsort(D)]
+                D_all[i, : len(D)] = D                    
+                D_all_neg[i, : len(N)] = N
+                
+        D_all = D_all[D_all.nonzero()]
+        D_all_neg = D_all_neg[D_all_neg.nonzero()]
+        
         kmeans = skcl.KMeans(n_clusters=self._N_level).fit(np.log(D_all).reshape(-1, 1))
 
         # For extremely small telescopes or datasets that are mostly 'broken', we can have (N_eig < N_level).
@@ -206,15 +212,20 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
         # are clustered together anyway, the trailing energy levels will be (close to) all-0 and can be discarded
         # on inspection.
 
-        # EO: keep cluster centroids for positive part
-        cluster_centroid = np.sort(np.exp(kmeans.cluster_centers_)[:, 0])[::-1]
-        # return D_all as well!!!!
-        print (f"D_all: {D_all}")
+
+        cluster_centroids = np.sort(np.exp(kmeans.cluster_centers_)[:, 0])[::-1]
+        intervals = centroid_to_intervals(cluster_centroids)
+        
+        if fne:
+            N_eig = max(int(np.ceil(len(D_all) / N_data)), self._N_level)
+        else:
+            N_eig = max(int(np.ceil((len(D_all) + len(D_all_neg)) / N_data)), self._N_level)
+            intervals = np.append(intervals, [[np.finfo("f").min, -np.finfo("f").tiny]], axis=0)
 
         if (return_eigenvalues):
-            return D_all, N_eig, centroid_to_intervals(cluster_centroid)
+            return D_all, N_eig, intervals
         else:
-            return N_eig, centroid_to_intervals(cluster_centroid)
+            return N_eig, intervals
 
     
 class SensitivityFieldParameterEstimator(ParameterEstimator):
