@@ -201,7 +201,7 @@ class IntensityFieldParameterEstimator(ParameterEstimator):
                 
         D_all = D_all[D_all.nonzero()]
         D_all_neg = D_all_neg[D_all_neg.nonzero()]
-        
+
         kmeans = skcl.KMeans(n_clusters=self._N_level).fit(np.log(D_all).reshape(-1, 1))
 
         # For extremely small telescopes or datasets that are mostly 'broken', we can have (N_eig < N_level).

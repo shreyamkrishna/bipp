@@ -96,7 +96,7 @@ elif (args.telescope.lower()=="mwa"):
     #N_station, N_antenna = 100, 100 # test3.py mwa /work/ska/redundantArray/redundantArray_10m.ms. -o redundantArray -n 1024 -f 1.1377777777777778 -l 1 -b True 2>&1 |tee redundantArrayImaging.log
 elif (args.telescope.lower()=="lofar"):
     N_station, N_antenna = 37, 37 # netherlands, 52 international
-    ms = measu/ment_set.LofarMeasurementSet(args.ms_file, N_station = N_station, station_only=True)
+    ms = measurement_set.LofarMeasurementSet(args.ms_file, N_station = N_station, station_only=True)
 
 else: 
     raise(NotImplementedError("A measurement set class for the telescope you are searching for has not been implemented yet - please feel free to implement the class yourself!"))
@@ -360,7 +360,6 @@ if (3 in plotList):
 
     fig.tight_layout()
     fig.savefig(f"{args.output}_EigHist.png")
-
 
 
 if (clusteringBool == False):

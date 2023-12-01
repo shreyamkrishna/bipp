@@ -599,11 +599,6 @@ class SKALowMeasurementSet(MeasurementSet):
     """
     SKA Low Measurement Set reader.
     """
-    @chk.check(
-        dict(file_name=chk.is_instance(str),
-             N_station=chk.allow_None(chk.is_integer),
-             origin=chk.allow_None(chk.is_instance(coord.EarthLocation)))
-    )
     def __init__(self, file_name, N_station=None, origin=None):
         """
         Parameters
@@ -705,8 +700,6 @@ class GenericMeasurementSet(MeasurementSet):
     """
     Generic Measurement Set reader.
     """
-
-    @chk.check("file_name", chk.is_instance(str))
     def __init__(self, file_name):
         """
         Parameters
