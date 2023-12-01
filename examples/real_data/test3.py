@@ -1,9 +1,5 @@
 """
 Script using pythons argparse to run bipp on real data sets. 
-To do: 
-Sepand point 1: 
-1) Use SKA Low, determine resonant frequency for maxima (5/2), minima (3/2)
-2) Modify bipp c++ code to change gram matrix (/src/gram_matrix.cpp, src/gpu/kernels/c)
 """
 
 import argparse
@@ -29,7 +25,9 @@ import time as tt
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.colors import TwoSlopeNorm
+from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+plt.rcParams.update({'font.size': 40})
 #"Eg:\npython realData.py [telescope name(string)] [path_to_ms(string)] [output_name(string)] [N_pix(int)] [FoV(float(deg))] [N_levels(int)] [Clustering(bool/list_of_eigenvalue_bin_edges)] [partitions] [WSCleangrid(bool)] [WSCleanPath(string)]"))
 
 start_time= tt.time()
@@ -85,16 +83,20 @@ if (args.telescope.lower()=="skalow"):
     ms=measurement_set.SKALowMeasurementSet(args.ms_file)
     N_station, N_antenna = 512, 512
 
+elif (args.telescope.lower()=="redundant"):
+    ms=measurement_set.GenericMeasurementSet(args.ms_file)
+    N_station = ms.AntennaNumber()
+    N_antenna = N_station
+
 elif (args.telescope.lower()=="mwa"):
     ms = measurement_set.MwaMeasurementSet(args.ms_file)
     N_station, N_antenna = 128, 128
-    #N_station, N_antenna = 58, 58
-    #N_station, N_antenna = 14,14
-    
-
+    #N_station, N_antenna = 58, 58 # MeerKAT MERGHERS pilot measurement set files
+    #N_station, N_antenna = 14,14 # WSRT measurement set file
+    #N_station, N_antenna = 100, 100 # test3.py mwa /work/ska/redundantArray/redundantArray_10m.ms. -o redundantArray -n 1024 -f 1.1377777777777778 -l 1 -b True 2>&1 |tee redundantArrayImaging.log
 elif (args.telescope.lower()=="lofar"):
     N_station, N_antenna = 37, 37 # netherlands, 52 international
-    ms = measurement_set.LofarMeasurementSet(args.ms_file, N_station = N_station, station_only=True)
+    ms = measu/ment_set.LofarMeasurementSet(args.ms_file, N_station = N_station, station_only=True)
 
 else: 
     raise(NotImplementedError("A measurement set class for the telescope you are searching for has not been implemented yet - please feel free to implement the class yourself!"))
@@ -199,6 +201,7 @@ print (f"Partitions:{args.partition}")
 sampling = 1
 
 # error tolerance for FFT
+
 eps = 1e-8
 
 #precision of calculation
@@ -206,11 +209,11 @@ precision = 'double'
 
 # Create context with selected processing unit.
 # Options are "AUTO", "CPU" and "GPU".
-ctx = bipp.Context("AUTO")
+ctx = bipp.Context("GPU") ## use this to compare two gram matrices one from cpu one from gpu 
 
 filter_tuple = ['lsq','std'] # might need to make this a list
 
-filter_negative_eigenvalues= True
+filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
@@ -284,6 +287,8 @@ opt.set_collect_group_size(None)
 opt.set_local_image_partition(bipp.Partition.grid([args.partition,args.partition,1]))
 opt.set_local_uvw_partition(bipp.Partition.grid([args.partition,args.partition,1]))
 
+#opt.set_local_image_partition(bipp.Partition.auto())
+#opt.set_local_uvw_partition(bipp.Partition.auto())
 print("N_pix = ", args.npix)
 print("precision = ", precision)
 print("Proc = ", ctx.processing_unit)
@@ -354,7 +359,8 @@ if (3 in plotList):
         ax.axvline(np.log10(eigenvalue_binEdge), color="r")
 
     fig.tight_layout()
-    fig.savefig(f"{args.output}+_EigHist.png")
+    fig.savefig(f"{args.output}_EigHist.png")
+
 
 
 if (clusteringBool == False):
@@ -402,9 +408,9 @@ for t, f, S in ProgressBar(
 
 lsq_image = imager.get("LSQ").reshape((-1, args.npix, args.npix))
 if (filter_negative_eigenvalues):
-    I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
+    I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel +1,lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
 else:
-    I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel + 1, lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
+    I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel, lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
 print("lsq_image.shape =", lsq_image.shape)
 
 I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
@@ -415,9 +421,9 @@ I_lsq_eq_summed.to_fits(f"{args.output}.fits")
 if (std_img_flag):
     std_image = imager.get("STD").reshape((-1, args.npix, args.npix))
     if (filter_negative_eigenvalues):
-        I_std_eq = s2image.Image(std_image.reshape(args.nlevel, std_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
+        I_std_eq = s2image.Image(std_image.reshape(args.nlevel + 1, std_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
     else:
-        I_std_eq = s2image.Image(std_image.reshape(args.nlevel + 1, std_image.shape[-2], std_image.shape[-1]), xyz_grid)
+        I_std_eq = s2image.Image(std_image.reshape(args.nlevel, std_image.shape[-2], std_image.shape[-1]), xyz_grid)
 
     
     print("std_image.shape =", std_image.shape)
@@ -434,11 +440,11 @@ lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
 
 lsq_image = lsq_levels.sum(axis = 0)
 
-fig, ax = plt.subplots(1, args.nlevel+1)
+fig, ax = plt.subplots(1, args.nlevel+1, figsize = (20*(args.nlevel+1), 20))
 
 if (std_img_flag):
 
-    fig, ax = plt.subplots(2, args.nlevel+1)
+    fig, ax = plt.subplots(2, args.nlevel+1, figsize=(20*(args.nlevel + 1), 40))
 
     std_levels = I_std_eq.data  # Nlevel, Npix, Npix
 
@@ -452,6 +458,8 @@ if (std_img_flag):
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
     cbar = plt.colorbar(stdScale, cax)
     cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+    cbar.formatter.set_powerlimits((0, 0))
+    cbar.formatter.set_useMathText(True)
 
     # Plot Std Level Images  
     for i in np.arange(args.nlevel):
@@ -462,6 +470,8 @@ if (std_img_flag):
         cax = divider.append_axes("right", size = "5%", pad = 0.05)
         cbar = plt.colorbar(stdScale, cax)
         cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+        cbar.formatter.set_powerlimits((0, 0))
+        cbar.formatter.set_useMathText(True)
 
 # Plot Lsq Summed Image    
 lsqScale = ax[0, 0].imshow(lsq_image)
@@ -471,6 +481,8 @@ divider = make_axes_locatable(ax[0, 0])
 cax = divider.append_axes("right", size = "5%", pad = 0.05)
 cbar = plt.colorbar(lsqScale, cax)
 cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+cbar.formatter.set_powerlimits((0, 0))
+cbar.formatter.set_useMathText(True)
 
 # Plot Lsq Level Image
 for i in np.arange(args.nlevel):
@@ -481,6 +493,8 @@ for i in np.arange(args.nlevel):
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
     cbar = plt.colorbar(lsqScale, cax)
     cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+    cbar.formatter.set_powerlimits((0, 0))
+    cbar.formatter.set_useMathText(True)
 
 fig.savefig(f"{args.output}.png")
 
