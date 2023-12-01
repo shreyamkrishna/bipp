@@ -351,7 +351,7 @@ if (3 in plotList):
     print (f"Saving Eigenvalue Histogram.")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
 
-    histArray, bins = ax.hist(np.log10(Eigs), bins=25)
+    ax.hist(np.log10(Eigs), bins=25)
     ax.set_title("Eigenvalue Histogram")
     ax.set_xlabel(r'$log_{10}(\lambda_{a})$')
     ax.set_ylabel("Count")
@@ -410,9 +410,9 @@ for t, f, S in ProgressBar(
 
 lsq_image = imager.get("LSQ").reshape((-1, args.npix, args.npix))
 if (filter_negative_eigenvalues):
-    I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
+    I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel +1,lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
 else:
-    I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel + 1, lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
+    I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel, lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
 print("lsq_image.shape =", lsq_image.shape)
 
 I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
@@ -423,9 +423,9 @@ I_lsq_eq_summed.to_fits(f"{args.output}.fits")
 if (std_img_flag):
     std_image = imager.get("STD").reshape((-1, args.npix, args.npix))
     if (filter_negative_eigenvalues):
-        I_std_eq = s2image.Image(std_image.reshape(args.nlevel, std_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
+        I_std_eq = s2image.Image(std_image.reshape(args.nlevel + 1, std_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
     else:
-        I_std_eq = s2image.Image(std_image.reshape(args.nlevel + 1, std_image.shape[-2], std_image.shape[-1]), xyz_grid)
+        I_std_eq = s2image.Image(std_image.reshape(args.nlevel, std_image.shape[-2], std_image.shape[-1]), xyz_grid)
 
     
     print("std_image.shape =", std_image.shape)
