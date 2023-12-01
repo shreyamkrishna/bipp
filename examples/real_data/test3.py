@@ -1,8 +1,9 @@
 """
 Script using pythons argparse to run bipp on real data sets. 
-
-Outstanding questions:
-What exactly does time slice do - do we require for it to be non 1 ????
+To do: 
+Sepand point 1: 
+1) Use SKA Low, determine resonant frequency for maxima (5/2), minima (3/2)
+2) Modify bipp c++ code to change gram matrix (/src/gram_matrix.cpp, src/gpu/kernels/c)
 """
 
 import argparse
@@ -198,10 +199,10 @@ print (f"Partitions:{args.partition}")
 sampling = 1
 
 # error tolerance for FFT
-eps = 1e-3
+eps = 1e-8
 
 #precision of calculation
-precision = 'single'
+precision = 'double'
 
 # Create context with selected processing unit.
 # Options are "AUTO", "CPU" and "GPU".
@@ -300,7 +301,7 @@ I_est = bb_pe.IntensityFieldParameterEstimator(args.nlevel, sigma=1, ctx=ctx)
 #for t, f, S, uvw_t in ProgressBar(
 for t, f, S in ProgressBar(
         #ms.visibilities(channel_id=[channel_id], time_id=slice(timeStart, timeEnd, 1), column=args.column, return_UVW = True)
-        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 50), column=args.column)
 ):
     wl = constants.speed_of_light / f.to_value(u.Hz)
     XYZ = ms.instrument(t)
@@ -342,7 +343,7 @@ if (2 in plotList):
 if (3 in plotList):
     print ("Saving Eigenvalue Histogram")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
-    histOutput, bins = ax.hist(np.log10(Eigs), log=True, bins = 25) # modify this so that we can see if there is data 
+    ax.hist(np.log10(Eigs), log=True, bins = 25) # modify this so that we can see if there is data 
     ax.set_title("Eigenvalue Histogram")
     ax.set_xlabel(r'$log_{10}(\lambda_{a})$')
     ax.set_ylabel("Count")
