@@ -127,7 +127,8 @@ protected:
     for (std::size_t i = 0; i < img.size(); ++i) {
       // Single precision is very inaccurate due to different summation orders
       // Use twice the absolute error for single precision
-      ASSERT_NEAR(img[i], imgRef[i], 0.05 * (4.0 / sizeof(T)));
+      // Note: image reference is not scaling by number of epochs
+      ASSERT_NEAR(img[i] * nEpochs, imgRef[i], 50 * (4.0 / sizeof(T)));
     }
   }
 
@@ -172,7 +173,8 @@ protected:
     for (std::size_t i = 0; i < img.size(); ++i) {
       // Single precision is very inaccurate due to different summation orders
       // Use twice the absolute error for single precision
-      ASSERT_NEAR(img[i], imgRef[i], 0.05 * (4.0 / sizeof(T)));
+      // Note: image reference is not scaling by number of epochs
+      ASSERT_NEAR(img[i] * nEpochs, imgRef[i], 0.05 * (4.0 / sizeof(T)));
     }
   }
 

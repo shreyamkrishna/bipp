@@ -201,7 +201,8 @@ print (f"Partitions:{args.partition}")
 sampling = 1
 
 # error tolerance for FFT
-eps = 1e-7
+
+eps = 1e-8
 
 #precision of calculation
 precision = 'double'
@@ -218,7 +219,6 @@ std_img_flag = True # put to true if std is passed as a filter
 
 plotList= np.array([3,])
 # 1 is Gram Matrix plotted via imshow
-
 
 #######################################################################################################################################################
 # Observation set up ########################################################################################
@@ -289,7 +289,6 @@ opt.set_local_uvw_partition(bipp.Partition.grid([args.partition,args.partition,1
 
 #opt.set_local_image_partition(bipp.Partition.auto())
 #opt.set_local_uvw_partition(bipp.Partition.auto())
-
 print("N_pix = ", args.npix)
 print("precision = ", precision)
 print("Proc = ", ctx.processing_unit)
@@ -318,7 +317,6 @@ for t, f, S in ProgressBar(
     I_est.collect(S, G)
     num_time_steps +=1
 
-print (f"Number of time steps: {num_time_steps}")
 Eigs, N_eig, intensity_intervals = I_est.infer_parameters(return_eigenvalues=True)
 
 if (1 in plotList):
@@ -348,10 +346,9 @@ if (2 in plotList):
     np.save(f"{args.output}_W", W.data)
 
 if (3 in plotList):
-    print (f"Saving Eigenvalue Histogram.")
+    print ("Saving Eigenvalue Histogram")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
-
-    ax.hist(np.log10(Eigs), bins=25)
+    ax.hist(np.log10(Eigs), log=True, bins = 25) # modify this so that we can see if there is data 
     ax.set_title("Eigenvalue Histogram")
     ax.set_xlabel(r'$log_{10}(\lambda_{a})$')
     ax.set_ylabel("Count")

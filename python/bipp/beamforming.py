@@ -73,6 +73,7 @@ def _as_BeamWeights(df):
     W = np.zeros(shape=(N_antenna, N_beam), dtype=complex)
     W[data.ROW_ID.values, data.COL_ID.values] = data.W.values
 
+
     ant_idx = pd.MultiIndex.from_arrays(
         [row_map.STATION_ID, row_map.ANTENNA_ID], names=["STATION_ID", "ANTENNA_ID"]
     )
