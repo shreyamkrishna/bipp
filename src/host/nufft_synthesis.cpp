@@ -10,7 +10,6 @@
 #include <functional>
 #include <memory>
 #include <vector>
-#include <cassert>
 
 #include "bipp/config.h"
 #include "bipp/exceptions.hpp"
@@ -36,8 +35,7 @@ template <typename T>
 NufftSynthesis<T>::NufftSynthesis(std::shared_ptr<ContextInternal> ctx, NufftSynthesisOptions opt,
                                   std::size_t nAntenna, std::size_t nBeam, std::size_t nIntervals,
                                   std::size_t nFilter, const BippFilter* filter, std::size_t nPixel,
-                                  const T* lmnX, const T* lmnY, const T* lmnZ,
-                                  const bool filter_negative_eigenvalues)
+                                  const T* lmnX, const T* lmnY, const T* lmnZ)
     : ctx_(std::move(ctx)),
       opt_(std::move(opt)),
       nIntervals_(nIntervals),
@@ -106,11 +104,9 @@ auto NufftSynthesis<T>::collect(std::size_t nEig, T wl, const T* intervals, std:
               sizeof(T) * nAntenna_ * nAntenna_);
   std::memcpy(uvwZ_.get() + collectCount_ * nAntenna_ * nAntenna_, uvw + 2 * lduvw,
               sizeof(T) * nAntenna_ * nAntenna_);
-  
+
   auto v = Buffer<std::complex<T>>(ctx_->host_alloc(), nBeam_ * nEig);
   auto d = Buffer<T>(ctx_->host_alloc(), nEig);
-
-  char range = filter_negative_eigenvalues_ ? 'V' : 'A';
 
   {
     auto g = Buffer<std::complex<T>>(ctx_->host_alloc(), nBeam_ * nBeam_);

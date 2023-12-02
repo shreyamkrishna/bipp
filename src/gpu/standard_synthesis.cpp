@@ -5,7 +5,6 @@
 #include <cstring>
 #include <functional>
 #include <memory>
-#include <cassert>
 
 #include "bipp/config.h"
 #include "bipp/exceptions.hpp"
@@ -31,7 +30,7 @@ StandardSynthesis<T>::StandardSynthesis(std::shared_ptr<ContextInternal> ctx, st
                                         std::size_t nBeam, std::size_t nIntervals,
                                         std::size_t nFilter, const BippFilter* filterHost,
                                         std::size_t nPixel, const T* pixelX, const T* pixelY,
-                                        const T* pixelZ, const bool filter_negative_eigenvalues)
+                                        const T* pixelZ)
     : ctx_(std::move(ctx)),
       nIntervals_(nIntervals),
       nFilter_(nFilter),
@@ -72,22 +71,10 @@ auto StandardSynthesis<T>::collect(std::size_t nEig, T wl, const T* intervalsHos
     center_vector<T>(queue, nAntenna_, xyz + i * ldxyz);
   }
 
-  auto g = queue.create_device_buffer<api::ComplexType<T>>(nBeam_ * nBeam_);
+  {
+    auto g = queue.create_device_buffer<api::ComplexType<T>>(nBeam_ * nBeam_);
 
-  gram_matrix<T>(*ctx_, nAntenna_, nBeam_, w, ldw, xyz, ldxyz, wl, g.get(), nBeam_);
-
-  std::size_t nEigOut = 0;
-  
-  char range = filter_negative_eigenvalues_ ? 'V' : 'A';
-
-  // Note different order of s and g input
-  if (s)
-    eigh<T>(*ctx_, nBeam_, nEig, s, lds, g.get(), nBeam_, range, &nEigOut, d.get(), v.get(), nBeam_);
-  else
-    eigh<T>(*ctx_, nBeam_, nEig, g.get(), nBeam_, nullptr, 0, range, &nEigOut, d.get(), v.get(), nBeam_);
-
-  if (not filter_negative_eigenvalues_)
-      assert (nEig == nEigOut);
+    gram_matrix<T>(*ctx_, nAntenna_, nBeam_, w, ldw, xyz, ldxyz, wl, g.get(), nBeam_);
 
     std::size_t nEigOut = 0;
     // Note different order of s and g input

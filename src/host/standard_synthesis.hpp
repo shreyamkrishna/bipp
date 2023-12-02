@@ -16,8 +16,7 @@ class StandardSynthesis {
 public:
   StandardSynthesis(std::shared_ptr<ContextInternal> ctx, std::size_t nAntenna, std::size_t nBeam,
                     std::size_t nIntervals, std::size_t nFilter, const BippFilter* filter,
-                    std::size_t nPixel, const T* pixelX, const T* pixelY, const T* pixelZ,
-                    const bool filter_negative_eigenvalues);
+                    std::size_t nPixel, const T* pixelX, const T* pixelY, const T* pixelZ);
 
   auto collect(std::size_t nEig, T wl, const T* intervals, std::size_t ldIntervals,
                const std::complex<T>* s, std::size_t lds, const std::complex<T>* w, std::size_t ldw,
@@ -36,7 +35,6 @@ private:
   Buffer<BippFilter> filter_;
   Buffer<T> pixelX_, pixelY_, pixelZ_;
   Buffer<T> img_;
-  const bool filter_negative_eigenvalues_;
 };
 
 }  // namespace host
