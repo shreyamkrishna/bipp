@@ -17,16 +17,12 @@ import astropy.units as u
 import casacore.tables as ct
 import numpy as np
 import pandas as pd
-import scipy.sparse as sparse
-import bipp.imot_tools.util.argcheck as chk
+
 import bipp.beamforming as beamforming
 import bipp.instrument as instrument
 import bipp.statistics as vis
 
 
-@chk.check(
-    dict(S=chk.is_instance(vis.VisibilityMatrix), W=chk.is_instance(beamforming.BeamWeights))
-)
 def filter_data(S, W):
     """
     Fix mis-matches to make data streams compatible.
@@ -68,13 +64,8 @@ def filter_data(S, W):
     broken_beam_idx = beam_idx2[np.isclose(np.sum(S_f.data, axis=1), 0)]
     mask = np.any(beam_idx2.values.reshape(-1, 1) == broken_beam_idx.values.reshape(1, -1), axis=1)
 
-    if np.any(mask) and sparse.isspmatrix(W.data):
-        w_lil = W.data.tolil()  # for efficiency
-        w_lil[:, mask] = 0
-        w_f = w_lil.tocsr()
-    else:
-        w_f = W.data.copy()
-        w_f[:, mask] = 0
+    w_f = W.data.copy()
+    w_f[:, mask] = 0
     W_f = beamforming.BeamWeights(data=w_f, ant_idx=W.index[0], beam_idx=beam_idx2)
 
     return S_f, W_f
@@ -89,7 +80,6 @@ class MeasurementSet:
     Focus is given to reading MS files from phased-arrays for the moment (i.e, not dish arrays).
     """
 
-    @chk.check("file_name", chk.is_instance(str))
     def __init__(self, file_name):
         """
         Parameters
@@ -197,6 +187,27 @@ class MeasurementSet:
             self._time = tb.QTable(dict(TIME_ID=t_id, TIME=t))
 
         return self._time
+    
+    @property
+    def uvw(self, mirror_uvw=True):
+        """
+        UVW coverage acquisition.
+
+        Returns
+        -------
+        :py:class:`~astropy.table.QTable`
+            (N_time, N_antenna, 3) UVW per timestep per antenna
+
+            * UVW : float
+        """
+
+        tab = ct.table(self._msf, ack=False, readonly=True)
+        UVW = tab.getcol('UVW')
+        UVW_time = UVW.reshape(len(self._time), UVW.shape[0]//len(self._time), 3)
+        if(mirror_uvw):
+            UVW_time = np.hstack((UVW_time, -UVW_time))
+
+        return UVW_time
 
     @property
     def instrument(self):
@@ -221,13 +232,6 @@ class MeasurementSet:
         """
         raise NotImplementedError
 
-    @chk.check(
-        dict(
-            channel_id=chk.accept_any(chk.has_integers, chk.is_instance(slice)),
-            time_id=chk.accept_any(chk.is_integer, chk.is_instance(slice)),
-            column=chk.is_instance(str),
-        )
-    )
     def visibilities(self, channel_id, time_id, column):
         """
         Extract visibility matrices.
@@ -257,7 +261,7 @@ class MeasurementSet:
             raise ValueError(f"column={column} does not exist in {self._msf}::MAIN.")
 
         channel_id = self.channels["CHANNEL_ID"][channel_id]
-        if chk.is_integer(time_id):
+        if isinstance(time_id, int):
             time_id = slice(time_id, time_id + 1, 1)
         N_time = len(self.time)
         time_start, time_stop, time_step = time_id.indices(N_time)
@@ -413,13 +417,6 @@ class LofarMeasurementSet(MeasurementSet):
     LOw-Frequency ARray (LOFAR) Measurement Set reader.
     """
 
-    @chk.check(
-        dict(
-            file_name=chk.is_instance(str),
-            N_station=chk.allow_None(chk.is_integer),
-            station_only=chk.is_boolean,
-        )
-    )
     def __init__(self, file_name, N_station=None, station_only=False):
         """
         Parameters
@@ -482,9 +479,8 @@ class LofarMeasurementSet(MeasurementSet):
             cfg_idx = pd.MultiIndex.from_product(
                 [station_id, range(N_antenna)], names=("STATION_ID", "ANTENNA_ID")
             )
-            cfg = pd.DataFrame(data=antenna_xyz, columns=("X", "Y", "Z"), index=cfg_idx).loc[
-                ~antenna_flag
-            ]
+
+            cfg = pd.DataFrame(data=antenna_xyz, columns=("X", "Y", "Z"), index=cfg_idx).loc[~antenna_flag]
 
             # If in `station_only` mode, return centroid of each station only.
             # Why do we not just use `station_mean` above? Because it arbitrarily
@@ -530,7 +526,6 @@ class MwaMeasurementSet(MeasurementSet):
     Murchison Widefield Array (MWA) Measurement Set reader.
     """
 
-    @chk.check("file_name", chk.is_instance(str))
     def __init__(self, file_name):
         """
         Parameters
@@ -604,11 +599,7 @@ class SKALowMeasurementSet(MeasurementSet):
     """
     SKA Low Measurement Set reader.
     """
-    @chk.check(
-        dict(file_name=chk.is_instance(str),
-             N_station=chk.allow_None(chk.is_integer))
-    )
-    def __init__(self, file_name, N_station=None):
+    def __init__(self, file_name, N_station=None, origin=None):
         """
         Parameters
         ----------
@@ -620,12 +611,15 @@ class SKALowMeasurementSet(MeasurementSet):
             Sometimes only a subset of an instrument’s stations are desired.
             Setting `N_station` limits the number of stations to those that appear first when sorted
             by STATION_ID.
+        origin : astropy EarthLocation
+            Reference location used to compute local station coordinates (ref. RASCIL issue)
         """
         super().__init__(file_name)
         if N_station is not None:
             if N_station <= 0:
                 raise ValueError("Parameter[N_station] must be positive.")
         self._N_station = N_station
+        self._origin = origin
 
     @property
     def instrument(self):
@@ -656,8 +650,24 @@ class SKALowMeasurementSet(MeasurementSet):
                 [station_id, [0]], names=("STATION_ID", "ANTENNA_ID")
             )
             cfg = pd.DataFrame(data=station_mean, columns=("X", "Y", "Z"), index=cfg_idx)
+            #print(cfg_idx)
+            #print(cfg)
+            #import sys
+            #sys.exit(1)
 
-            XYZ = instrument.InstrumentGeometry(xyz=cfg.values, ant_idx=cfg.index)
+
+            if self._origin:
+                o = np.array([self._origin.x.value, self._origin.y.value, self._origin.z.value])
+                xyz = cfg.values - o
+                for i in range(0, xyz.shape[0]):
+                    xyz[i,:] = rascil_crd__enu_to_ecef(self._origin, xyz[i,:])
+                XYZ = instrument.InstrumentGeometry(xyz=xyz, ant_idx=cfg.index)
+                #XYZ_wrong = instrument.InstrumentGeometry(xyz=cfg.values, ant_idx=cfg.index)
+                #print("XYZ CORRECT\n", XYZ.data[0:5,:])
+                #print("XYZ WRONG\n", XYZ_wrong.data[0:5,:])
+                #print("XYZ DIFF\n", XYZ_wrong.data[0:5,:] - XYZ.data[0:5,:])
+            else:
+                XYZ = instrument.InstrumentGeometry(xyz=cfg.values, ant_idx=cfg.index)
             
             self._instrument = instrument.EarthBoundInstrumentGeometryBlock(XYZ)
 
@@ -685,3 +695,90 @@ class SKALowMeasurementSet(MeasurementSet):
             self._beamformer = beamforming.MatchedBeamformerBlock(beam_config)
 
         return self._beamformer
+
+class GenericMeasurementSet(MeasurementSet):
+    """
+    Generic Measurement Set reader.
+    """
+    def __init__(self, file_name):
+        """
+        Parameters
+        ----------
+        file_name : str
+            Name of the MS file.
+        """
+        self._nstation = None
+        super().__init__(file_name)
+
+    @property
+    def instrument(self):
+        """
+        Returns
+        -------
+        :py:class:`~pypeline.phased_array.instrument.EarthBoundInstrumentGeometryBlock`
+            Instrument position computer.
+        """
+        if self._instrument is None:
+            # Following the MS file specification from https://casa.nrao.edu/casadocs/casa-5.1.0/reference-material/measurement-set,
+            # the ANTENNA sub-table specifies the antenna geometry.
+            # Some remarks on the required fields:
+            # - POSITION: absolute station positions in ITRF coordinates.
+            # - ANTENNA_ID: equivalent to STATION_ID field `InstrumentGeometry.index[0]`
+            #               This field is NOT present in the ANTENNA sub-table, but is given
+            #               implicitly by its row-ordering.
+            #               In other words, the station corresponding to ANTENNA1=k in the MAIN
+            #               table is described by the k-th row of the ANTENNA sub-table.
+            query = f"select POSITION from {self._msf}::ANTENNA"
+            table = ct.taql(query)
+            station_mean = table.getcol("POSITION")
+
+            N_station = len(station_mean)
+            station_id = np.arange(N_station)
+            cfg_idx = pd.MultiIndex.from_product(
+                [station_id, [0]], names=("STATION_ID", "ANTENNA_ID")
+            )
+            cfg = pd.DataFrame(data=station_mean, columns=("X", "Y", "Z"), index=cfg_idx)
+
+            XYZ = instrument.InstrumentGeometry(xyz=cfg.values, ant_idx=cfg.index)
+
+            self._instrument = instrument.EarthBoundInstrumentGeometryBlock(XYZ)
+        return self._instrument
+        
+    def AntennaNumber(self):
+        """
+        Returns 
+        -------
+        Number of stations present in MS file (int)
+        """
+        query = f"select POSITION from {self._msf}::ANTENNA"
+        table = ct.taql(query)
+        station_mean = table.getcol("POSITION")
+        self._nstation = len(station_mean)
+        return self._nstation
+
+
+
+    @property
+    def beamformer(self):
+        """
+        Each dataset has been beamformed in a specific way.
+        This property outputs the correct beamformer to compute the beamforming weights.
+
+        Returns
+        -------
+        :py:class:`~pypeline.phased_array.beamforming.MatchedBeamformerBlock`
+            Beamweight computer.
+        """
+        if self._beamformer is None:
+            # MWA does not do any beamforming.
+            # Given the single-antenna station model in MS files from MWA, this can be seen as
+            # Matched-Beamforming, with a single beam output per station.
+            XYZ = self.instrument._layout
+            beam_id = np.unique(XYZ.index.get_level_values("STATION_ID"))
+
+            direction = self.field_center
+            beam_config = [(_, _, direction) for _ in beam_id]
+            self._beamformer = beamforming.MatchedBeamformerBlock(beam_config)
+
+        return self._beamformer
+
