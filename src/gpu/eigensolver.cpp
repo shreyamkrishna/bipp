@@ -21,6 +21,7 @@ template <typename T>
 auto eigh(ContextInternal& ctx, std::size_t m, std::size_t nEig, const api::ComplexType<T>* a,
           std::size_t lda, const api::ComplexType<T>* b, std::size_t ldb, T* d,
           api::ComplexType<T>* v, std::size_t ldv) -> void {
+  b = nullptr;
   // TODO: add fill mode
   using ComplexType = api::ComplexType<T>;
   using ScalarType = T;
