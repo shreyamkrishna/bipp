@@ -217,7 +217,7 @@ filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([3,])
+plotList= np.array([1,2,3,])
 # 1 is Gram Matrix plotted via imshow
 
 #######################################################################################################################################################

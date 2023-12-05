@@ -43,7 +43,7 @@ auto gram_matrix(ContextInternal& ctx, std::size_t m, std::size_t n, const std::
       auto diffY = y[i] - y[j];
       auto diffZ = z[i] - z[j];
       auto norm = std::sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
-      basePtr[i * m + j] = T(0);//calc_pi_sinc(T(2) * norm / wl);//
+      basePtr[i * m + j] = calc_pi_sinc(T(2) * norm / wl);//
     }
   }
 
