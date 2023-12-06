@@ -77,6 +77,9 @@ parser.add_argument("-g", "--grid", type=str,
 parser.add_argument("--column", type=str,
                     help="Which column from the measurement set file to image. Eg: DATA, CORRECTED_DATA, MODEL_DATA")
 
+parser.add_argument("-e", "--eps",
+                    help="Error Tolerance of the nuFFT. 1e-3 is a decent value for most applications. 1e-7/1e-8 required for 21cm experiments.")
+
 args = parser.parse_args()
 
 if (args.telescope.lower()=="skalow"):
@@ -170,7 +173,11 @@ else:
 if (args.column==None):
     args.column = "DATA"
     
-
+if (args.eps==None):
+    eps=1e-3
+    args.eps=1e-3
+else: 
+    eps = float(args.eps)
     
 print (f"Telescope Name:{args.telescope}")
 print (f"MS file:{args.ms_file}")
@@ -200,9 +207,7 @@ print (f"Partitions:{args.partition}")
 # N means the output will have WSClean Image/N pixels
 sampling = 1
 
-# error tolerance for FFT
-
-eps = 1e-8
+# error tolerance for FFT now done in command line
 
 #precision of calculation
 precision = 'double'
