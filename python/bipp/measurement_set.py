@@ -26,24 +26,20 @@ import bipp.statistics as vis
 def filter_data(S, W):
     """
     Fix mis-matches to make data streams compatible.
-
     Visibility matrices from MS files typically include broken beams and/or may not match beams
     specified in beamforming matrices.
     This mis-match causes computations further down the imaging pypeline to be less efficient or
     completely wrong.
     This function applies 2 corrections to visibility and beamforming matrices to make them
     compliant:
-
     * Drop beams in `S` that do not appear in `W`;
     * Insert 0s in `W` where `S` has broken beams.
-
     Parameters
     ----------
     S : :py:class:`~pypeline.phased_array.data_gen.statistics.VisibilityMatrix`
         (N_beam1, N_beam1) visibility matrix.
     W : :py:class:`~pypeline.phased_array.beamforming.BeamWeights`
         (N_antenna, N_beam2) beamforming matrix.
-
     Returns
     -------
     S : :py:class:`~pypeline.phased_array.data_gen.statistics.VisibilityMatrix`
@@ -64,8 +60,13 @@ def filter_data(S, W):
     broken_beam_idx = beam_idx2[np.isclose(np.sum(S_f.data, axis=1), 0)]
     mask = np.any(beam_idx2.values.reshape(-1, 1) == broken_beam_idx.values.reshape(1, -1), axis=1)
 
-    w_f = W.data.copy()
-    w_f[:, mask] = 0
+    if np.any(mask) and sparse.isspmatrix(W.data):
+        w_lil = W.data.tolil()  # for efficiency
+        w_lil[:, mask] = 0
+        w_f = w_lil.tocsr()
+    else:
+        w_f = W.data.copy()
+        w_f[:, mask] = 0
     W_f = beamforming.BeamWeights(data=w_f, ant_idx=W.index[0], beam_idx=beam_idx2)
 
     return S_f, W_f
@@ -235,7 +236,6 @@ class MeasurementSet:
     def visibilities(self, channel_id, time_id, column):
         """
         Extract visibility matrices.
-
         Parameters
         ----------
         channel_id : array-like(int) or slice
@@ -244,117 +244,71 @@ class MeasurementSet:
             Several TIME_IDs from :py:attr:`~pypeline.phased_array.util.measurement_set.MeasurementSet.time`.
         column : str
             Column name from MAIN table where visibility data resides.
-
             (This is required since several visibility-holding columns can co-exist.)
-
         Returns
         -------
         iterable
-
             Generator object returning (time, freq, S) triplets with:
-
             * time (:py:class:`~astropy.time.Time`): moment the visibility was formed;
             * freq (:py:class:`~astropy.units.Quantity`): center frequency of the visibility;
             * S (:py:class:`~pypeline.phased_array.data_gen.statistics.VisibilityMatrix`)
         """
+
         if column not in ct.taql(f"select * from {self._msf}").colnames():
             raise ValueError(f"column={column} does not exist in {self._msf}::MAIN.")
 
+        table = ct.table(self._msf)
+
         channel_id = self.channels["CHANNEL_ID"][channel_id]
-        if isinstance(time_id, int):
-            time_id = slice(time_id, time_id + 1, 1)
-        N_time = len(self.time)
-        time_start, time_stop, time_step = time_id.indices(N_time)
+        for idx, sub_table in enumerate(table.iter("TIME", sort=True)):
+         # all TIME's in the subtable should be the same
+            if idx <= time_id.stop:
+                if idx in range(time_id.start, time_id.stop, time_id.step):
+                    utime = sub_table.getcell("TIME", 0)
+                    beam_id_0 = sub_table.getcol("ANTENNA1") # (N_entry,)
+                    beam_id_1 = sub_table.getcol("ANTENNA2") # (N_entry,)
+                    data_flag = sub_table.getcol("FLAG") # (N_entry, N_channel, 4)
+                    data = sub_table.getcol(column) # (N_entry, N_channel, 4)
 
-        # Only a subset of the MAIN table's columns are needed to extract visibility information.
-        # As such, it makes sense to construct a TaQL query that only extracts the columns of
-        # interest as shown below:
-        #    select ANTENNA1, ANTENNA2, MJD(TIME) as TIME, {column}, FLAG from {self._msf} where TIME in
-        #    (select unique TIME from {self._msf} limit {time_start}:{time_stop}:{time_step})
-        # Unfortunately this query consumes a lot of memory due to the column selection process.
-        # Therefore, we will instead ask for all columns and only access those of interest.
-        query = (
-            f"select * from {self._msf} where TIME in "
-            f"(select unique TIME from {self._msf} limit {time_start}:{time_stop}:{time_step})"
-        )
-        table = ct.taql(query)
+                    # We only want XX and YY correlations
+                    data = np.average(data[:, :, [0, 3]], axis=2)[:, channel_id]
+                    data_flag = np.any(data_flag[:, :, [0, 3]], axis=2)[:, channel_id]
+                    data[data_flag] = 0
 
-        for sub_table in table.iter("TIME", sort=True):
-            beam_id_0 = sub_table.getcol("ANTENNA1")  # (N_entry,)
-            beam_id_1 = sub_table.getcol("ANTENNA2")  # (N_entry,)
-            data_flag = sub_table.getcol("FLAG")  # (N_entry, N_channel, 4)
-            data = sub_table.getcol(column)  # (N_entry, N_channel, 4)
+                    beam_id = np.unique(self.instrument._layout.index.get_level_values("STATION_ID"))
+                    N_beam = len(beam_id)
+                    i, j = np.triu_indices(N_beam, k=0)
 
-            try:
-                weight_spectrum = sub_table.getcol("WEIGHT_SPECTRUM")
-            except:
-                weight_spectrum = None
+                    row_id_wanted = beam_id[i]
+                    col_id_wanted = beam_id[j]
 
-            # We only want XX and YY correlations
-            data = np.average(data[:, :, [0, 3]], axis=2)[:, channel_id]
-            data_flag = np.any(data_flag[:, :, [0, 3]], axis=2)[:, channel_id]
+                    mask = np.logical_and(np.isin(beam_id_0, row_id_wanted), np.isin(beam_id_1, col_id_wanted))
 
-            # Set broken visibilities to 0
-            data[data_flag] = 0
 
-            # DataFrame description of visibility data.
-            # Each column represents a different channel.
-            S_full_idx = pd.MultiIndex.from_arrays((beam_id_0, beam_id_1), names=("B_0", "B_1"))
-            S_full = pd.DataFrame(data=data, columns=channel_id, index=S_full_idx)
+                    for i in range(len(channel_id)):
+                        ch = channel_id[i]
+                        # Apply the mask to retain only the desired pairs
+                        filtered_col_id_full = beam_id_1[mask]
+                        filtered_row_id_full = beam_id_0[mask]
+                        filtered_data = data[:,i][mask]
 
-            # Drop rows of `S_full` corresponding to unwanted beams.
-            beam_id = np.unique(self.instrument._layout.index.get_level_values("STATION_ID"))
-            N_beam = len(beam_id)
-            i, j = np.triu_indices(N_beam, k=0)
-            wanted_index = pd.MultiIndex.from_arrays((beam_id[i], beam_id[j]), names=("B_0", "B_1"))
-            index_to_drop = S_full_idx.difference(wanted_index)
-            S_trunc = S_full.drop(index=index_to_drop)
+                        matrix_size = max(np.max(filtered_row_id_full), np.max(filtered_col_id_full)) + 1
 
-            # Depending on the dataset, some (ANTENNA1, ANTENNA2) pairs that have correlation=0 are
-            # omitted in the table.
-            # This is problematic as the previous DataFrame construction could be potentially
-            # missing entire antenna ranges.
-            # To fix this issue, we augment the dataframe to always make sure `S_trunc` matches the
-            # desired shape.
-            index_diff = wanted_index.difference(S_trunc.index)
-            N_diff = len(index_diff)
+                        matrix = np.zeros((matrix_size, matrix_size),dtype=np.complex64)
 
-            S_fill_in = pd.DataFrame(
-                data=np.zeros((N_diff, len(channel_id)), dtype=data.dtype),
-                columns=channel_id,
-                index=index_diff)
-            S = pd.concat([S_trunc, S_fill_in], axis=0, ignore_index=False).sort_index(
-                level=["B_0", "B_1"])
-            
+                        matrix[filtered_row_id_full, filtered_col_id_full] = filtered_data
+                        matrix[filtered_col_id_full, filtered_row_id_full] = np.conjugate(filtered_data)
 
-            # Break S into columns and stream out
-            t = time.Time(sub_table.calc("MJD(TIME)")[0], format="mjd", scale="utc")
-            f = self.channels["FREQUENCY"]
-            beam_idx = pd.Index(beam_id, name="BEAM_ID")
+                        f = self.channels["FREQUENCY"] 
+                        beam_idx = pd.Index(beam_id, name="BEAM_ID")
+                        vismatrix = vis.VisibilityMatrix(matrix, beam_idx)
 
-            if weight_spectrum is not None:
-                # Mimic WSClean
-                weight = np.min(weight_spectrum[:, :, [0, 3]], axis=2)[:, channel_id]
-                weight[data_flag] = 0
-                W_full = pd.DataFrame(data=weight, columns=channel_id, index=S_full_idx)
-                W_trunc = W_full.drop(index=index_to_drop)
-                W_fill_in = pd.DataFrame(
-                    data=np.zeros((N_diff, len(channel_id)), dtype=weight.dtype),
-                    columns=channel_id,
-                    index=index_diff)
-                W = pd.concat([W_trunc, W_fill_in], axis=0, ignore_index=False).sort_index(
-                    level=["B_0", "B_1"])
+                        yield utime, f[ch], vismatrix
 
-            for ch_id in channel_id:
-                v = _series2array(S[ch_id].rename("S", inplace=True))
-                nz_vis = np.count_nonzero(v)
-                if nz_vis == 0:
+                else:
                     continue
-                if weight_spectrum is not None:
-                    w = _series2array_w(W[ch_id].rename("W", inplace=True))
-                    v *= w / np.sum(w) * nz_vis
-                visibility = vis.VisibilityMatrix(v, beam_idx)
-                yield t, f[ch_id], visibility
+            else:
+                break
 
 
 def _series2array(visibility: pd.Series) -> np.ndarray:
