@@ -209,7 +209,7 @@ precision = 'double'
 
 # Create context with selected processing unit.
 # Options are "AUTO", "CPU" and "GPU".
-ctx = bipp.Context("GPU") ## use this to compare two gram matrices one from cpu one from gpu 
+ctx = bipp.Context("CPU") ## use this to compare two gram matrices one from cpu one from gpu 
 
 filter_tuple = ['lsq','std'] # might need to make this a list
 
@@ -217,7 +217,7 @@ filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([3,])
+plotList= np.array([1,2,3,])
 # 1 is Gram Matrix plotted via imshow
 
 #######################################################################################################################################################
@@ -322,7 +322,7 @@ Eigs, N_eig, intensity_intervals = I_est.infer_parameters(return_eigenvalues=Tru
 if (1 in plotList):
     print ("Saving Gram Matrix")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
-    gramScale = ax.imshow(np.abs(G.data)+ np.min(np.nonzero(G.data))/2, norm =LogNorm(), cmap='cubehelix')
+    gramScale = ax.imshow(np.abs(G.data)+ 1e-2, norm =LogNorm(), cmap='cubehelix')
     ax.set_title("Gram Matrix")
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
@@ -335,7 +335,7 @@ if (1 in plotList):
 if (2 in plotList):
     print (f"Saving beamforming matrix. min:{np.min(np.nonzero(W.data))/2}")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
-    beamformingScale = ax.imshow(np.abs(W.data) + np.min(np.nonzero(W.data))/2, norm= LogNorm(), cmap='cubehelix')
+    beamformingScale = ax.imshow(np.abs(W.data) + 1e-2, norm= LogNorm(), cmap='cubehelix')
     ax.set_title("Beamforming Matrix") 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
