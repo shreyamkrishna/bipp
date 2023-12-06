@@ -77,6 +77,9 @@ parser.add_argument("-g", "--grid", type=str,
 parser.add_argument("--column", type=str,
                     help="Which column from the measurement set file to image. Eg: DATA, CORRECTED_DATA, MODEL_DATA")
 
+parser.add_argument("-e", "--eps",
+                    help="Error Tolerance of the nuFFT. 1e-3 is a decent value for most applications. 1e-7/1e-8 required for 21cm experiments.")
+
 args = parser.parse_args()
 
 if (args.telescope.lower()=="skalow"):
@@ -169,6 +172,12 @@ else:
 
 if (args.column==None):
     args.column = "DATA"
+
+if (args.eps==None):
+    eps=1e-3
+    args.eps=1e-3
+else: 
+    eps = float(args.eps)
     
 
     
@@ -200,9 +209,7 @@ print (f"Partitions:{args.partition}")
 # N means the output will have WSClean Image/N pixels
 sampling = 1
 
-# error tolerance for FFT
-
-eps = 1e-8
+# error tolerance for FFT Now done in command line
 
 #precision of calculation
 precision = 'double'
@@ -322,7 +329,7 @@ Eigs, N_eig, intensity_intervals = I_est.infer_parameters(return_eigenvalues=Tru
 if (1 in plotList):
     print ("Saving Gram Matrix")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
-    gramScale = ax.imshow(np.abs(G.data)+ np.min(np.nonzero(G.data))/2, norm =LogNorm(), cmap='cubehelix')
+    gramScale = ax.imshow(np.abs(G.data)+ 1e-2, norm =LogNorm(), cmap='cubehelix')
     ax.set_title("Gram Matrix")
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
