@@ -222,10 +222,10 @@ filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([1,2,3,])
+plotList= np.array([])
 # 1 is Gram Matrix plotted via imshow
 
-outputCustomFitsFile = False
+outputCustomFitsFile = True
 
 #######################################################################################################################################################
 # Observation set up ########################################################################################
@@ -509,22 +509,7 @@ print (f"Plotting and fits output time:{tt.time() - pf_t} s")
 print (f"Total time: {tt.time()- start_time} s")
 
 if (outputCustomFitsFile):
-    hdu =fits.primaryHDU()
-    hdu.header['SIMPLE'] = "T" # fits compliant format
-    if (precision.lower()=='double'):
-        hdu.header['BITPIX']=-64 # double precision float
-    elif (precision.lower()=='single'):
-        hdu.header['BITPIX']=-32 # single precision float
-    hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
-    hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
-    hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
-    hdu.header['EXTEND'] = "T" # Fits data set may contain extensions
-    hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
-    hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
-    hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
-    hdu.header['BTYPE'] = 'Intensity'
-    hdu.header['ORIGIN'] = "BIPP"
-    # instead of this, make wcs and store as header
+
     w = awcs.WCS(naxis=2)
 
     
@@ -533,11 +518,33 @@ if (outputCustomFitsFile):
     w.wcs.crval = np.array([field_center.ra.deg, field_center.dec.deg])
     w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
 
-    cart = coord.CartesianRepresentation(xyz_grid[:, 0], xyz_grid[:, 1], xyz_grid[:, 2])
-    sph = coord.SphericalRepresentation.from_cartesian(cart)
+    #cart = coord.CartesianRepresentation(xyz_grid[:, 0], xyz_grid[:, 1], xyz_grid[:, 2])
+    #sph = coord.SphericalRepresentation.from_cartesian(cart)
 
-    colat = u.Quantity(90 * u.deg - sph.lat).to_value(u.rad)
-    lon = u.Quantity(sph.lon).to_value(u.rad)
+    #colat = u.Quantity(90 * u.deg - sph.lat).to_value(u.rad)
+    #lon = u.Quantity(sph.lon).to_value(u.rad)
 
-    print (colat.max(), lon.max())
+    #print (colat.max(), lon.max())
+
+    header = w.to_header()
+    hdu =fits.PrimaryHDU(I_lsq_eq_summed.data,header=header)
+
+    hdu.header['SIMPLE'] = "T" # fits compliant format
+    if (precision.lower()=='double'):
+        hdu.header['BITPIX']=-64 # double precision float
+    elif (precision.lower()=='single'):
+        hdu.header['BITPIX']=-32 # single precision float
+    hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
+    hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
+    hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
+    #shdu.header['EXTEND'] = "T" # Fits data set may contain extensions
+    hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
+    hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
+    hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
+    hdu.header['BTYPE'] = 'Intensity'
+    hdu.header['ORIGIN'] = "BIPP"
+
+    hdu.writeto("test.fits", overwrite=True)
+    # instead of this, make wcs and store as header
+    
 
