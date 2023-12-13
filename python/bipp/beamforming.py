@@ -224,7 +224,7 @@ class MatchedBeamformerBlock(BeamformerBlock):
             XYZ.reshape(-1, 1, 3) @ F_XYZ.reshape(-1, 3, 1), axis=(1, 2)
         )
         W = np.exp((-1j * 2 * np.pi) * similarity)
-        W = np.eye(similarity[0])
+        W = np.eye(similarity.shape[0])
 
         df = pd.DataFrame(
             dict(
