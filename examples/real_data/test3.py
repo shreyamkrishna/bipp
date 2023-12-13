@@ -214,7 +214,7 @@ precision = 'double'
 
 # Create context with selected processing unit.
 # Options are "AUTO", "CPU" and "GPU".
-ctx = bipp.Context("CPU") ## use this to compare two gram matrices one from cpu one from gpu 
+ctx = bipp.Context("GPU") ## use this to compare two gram matrices one from cpu one from gpu 
 
 filter_tuple = ['lsq','std'] # might need to make this a list
 
