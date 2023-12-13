@@ -194,6 +194,8 @@ print (f"ms channel start:{channelStart} channel end: {channelEnd}")
 print (f"ms timestep start: {timeStart} timestep end: {timeEnd}")
 print (f"WSClean Path:{args.wsclean}")
 print (f"Partitions:{args.partition}")
+print (f"MS Column Used: {args.column}")
+print (f"nuFFT tolerance: {args.eps}")
 
 ##############################################################################################################
 ############################################ Control Variables ############################################
