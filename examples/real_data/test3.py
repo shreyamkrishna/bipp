@@ -222,7 +222,7 @@ filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([1,2,3,])
+plotList= np.array([3,])
 # 1 is Gram Matrix plotted via imshow
 
 #######################################################################################################################################################
@@ -289,7 +289,7 @@ opt.set_collect_group_size(None)
 #opt.set_local_image_partition(bipp.Partition.grid([1,1,1]))
 #opt.set_local_image_partition(bipp.Partition.none()) # Commented out
 #opt.set_local_uvw_partition(bipp.Partition.none()) # Commented out
-opt.set_local_image_partition(bipp.Partition.grid([args.partition,args.partition,1]))
+opt.set_local_image_partition(bipp.Partition.grid([1,1,1]))
 opt.set_local_uvw_partition(bipp.Partition.grid([args.partition,args.partition,1]))
 
 #opt.set_local_image_partition(bipp.Partition.auto())
