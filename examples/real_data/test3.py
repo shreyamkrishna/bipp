@@ -420,10 +420,8 @@ else:
     I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel, lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
 print("lsq_image.shape =", lsq_image.shape)
 
-I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
-
 I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2], lsq_image.shape[-1]).sum(axis = 0), xyz_grid)
-I_lsq_eq_summed.to_fits(f"{args.output}.fits")
+
 
 if (std_img_flag):
     std_image = imager.get("STD").reshape((-1, args.npix, args.npix))
@@ -514,7 +512,7 @@ if (outputCustomFitsFile):
 
     
     w.wcs.crpix = np.array([args.npix//2 + 1, args.npix//2 + 1])
-    w.wcs.cdelt = np.array([np.deg2rad(-args.npix/args.fov), np.deg2rad(args.npix/args.fov)])
+    w.wcs.cdelt = np.array([-np.rad2deg(args.fov)/args.npix, np.rad2deg(args.fov)/args.npix])
     w.wcs.crval = np.array([field_center.ra.deg, field_center.dec.deg])
     w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
 
@@ -527,7 +525,7 @@ if (outputCustomFitsFile):
     #print (colat.max(), lon.max())
 
     header = w.to_header()
-    hdu =fits.PrimaryHDU(I_lsq_eq_summed.data,header=header)
+    hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq_summed.data),header=header)
 
     hdu.header['SIMPLE'] = "T" # fits compliant format
     if (precision.lower()=='double'):
@@ -544,7 +542,29 @@ if (outputCustomFitsFile):
     hdu.header['BTYPE'] = 'Intensity'
     hdu.header['ORIGIN'] = "BIPP"
 
-    hdu.writeto("test.fits", overwrite=True)
+    hdu.writeto(f"{args.output}.fits", overwrite=True)
+
+    hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq.data),header=header)
+
+    hdu.header['SIMPLE'] = "T" # fits compliant format
+    if (precision.lower()=='double'):
+        hdu.header['BITPIX']=-64 # double precision float
+    elif (precision.lower()=='single'):
+        hdu.header['BITPIX']=-32 # single precision float
+    hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
+    hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
+    hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
+    #shdu.header['EXTEND'] = "T" # Fits data set may contain extensions
+    hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
+    hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
+    hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
+    hdu.header['BTYPE'] = 'Intensity'
+    hdu.header['ORIGIN'] = "BIPP"
+
+    hdu.writeto(f"{args.output}_lvls.fits", overwrite=True)
     # instead of this, make wcs and store as header
+else:
+    I_lsq_eq_summed.to_fits(f"{args.output}.fits")
+    I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
     
 
