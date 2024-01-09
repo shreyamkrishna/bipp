@@ -216,7 +216,7 @@ precision = 'double'
 
 # Create context with selected processing unit.
 # Options are "AUTO", "CPU" and "GPU".
-ctx = bipp.Context("GPU") ## use this to compare two gram matrices one from cpu one from gpu 
+ctx = bipp.Context("GPU")
 
 filter_tuple = ['lsq','std'] # might need to make this a list
 
@@ -225,6 +225,8 @@ filter_negative_eigenvalues= False
 std_img_flag = True # put to true if std is passed as a filter
 
 plotList= np.array([3,])
+
+outputCustomFitsFile = True
 # 1 is Gram Matrix plotted via imshow
 
 #######################################################################################################################################################
@@ -326,6 +328,9 @@ for t, f, S in ProgressBar(
 
 Eigs, N_eig, intensity_intervals = I_est.infer_parameters(return_eigenvalues=True)
 
+if (clusteringBool == False):
+    intensity_intervals=clustering # N_eig still to be obtained from parameter estimator????? IMP # 26 for 083 084 39 for????
+
 if (1 in plotList):
     print ("Saving Gram Matrix")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
@@ -364,13 +369,11 @@ if (3 in plotList):
 
     for eigenvalue_binEdge in eigenvalue_binEdges:
         ax.axvline(np.log10(eigenvalue_binEdge), color="r")
-
+    print(f"Max Eigenvalue (log):{np.log10(Eigs.max())}, Min Eigenvalue (log): {np.log10(Eigs.min())}")
+    print(f"Eigs: {Eigs}")
     fig.tight_layout()
     fig.savefig(f"{args.output}_EigHist.png")
 
-
-if (clusteringBool == False):
-    intensity_intervals=clustering # N_eig still to be obtained from parameter estimator????? IMP # 26 for 083 084 39 for????
 
 print (f"Number of Eigenvalues:{N_eig}, Intensity intervals: {intensity_intervals}")
 print (f"Parameter Estimator takes: {tt.time() - pe_t} s")
@@ -419,10 +422,7 @@ else:
     I_lsq_eq = s2image.Image(lsq_image.reshape(args.nlevel, lsq_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
 print("lsq_image.shape =", lsq_image.shape)
 
-I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
-
 I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2], lsq_image.shape[-1]).sum(axis = 0), xyz_grid)
-I_lsq_eq_summed.to_fits(f"{args.output}.fits")
 
 if (std_img_flag):
     std_image = imager.get("STD").reshape((-1, args.npix, args.npix))
@@ -506,3 +506,64 @@ fig.savefig(f"{args.output}.png")
 
 print (f"Plotting and fits output time:{tt.time() - pf_t} s")
 print (f"Total time: {tt.time()- start_time} s")
+
+if (outputCustomFitsFile):
+
+    w = awcs.WCS(naxis=2)
+
+    
+    w.wcs.crpix = np.array([args.npix//2 + 1, args.npix//2 + 1])
+    w.wcs.cdelt = np.array([-np.rad2deg(args.fov)/args.npix, np.rad2deg(args.fov)/args.npix])
+    w.wcs.crval = np.array([field_center.ra.deg, field_center.dec.deg])
+    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
+
+    #cart = coord.CartesianRepresentation(xyz_grid[:, 0], xyz_grid[:, 1], xyz_grid[:, 2])
+    #sph = coord.SphericalRepresentation.from_cartesian(cart)
+
+    #colat = u.Quantity(90 * u.deg - sph.lat).to_value(u.rad)
+    #lon = u.Quantity(sph.lon).to_value(u.rad)
+
+    #print (colat.max(), lon.max())
+
+    header = w.to_header()
+    hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq_summed.data),header=header)
+
+    hdu.header['SIMPLE'] = "T" # fits compliant format
+    if (precision.lower()=='double'):
+        hdu.header['BITPIX']=-64 # double precision float
+    elif (precision.lower()=='single'):
+        hdu.header['BITPIX']=-32 # single precision float
+    hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
+    hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
+    hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
+    #shdu.header['EXTEND'] = "T" # Fits data set may contain extensions
+    hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
+    hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
+    hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
+    hdu.header['BTYPE'] = 'Intensity'
+    hdu.header['ORIGIN'] = "BIPP"
+
+    hdu.writeto(f"{args.output}.fits", overwrite=True)
+
+    hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq.data),header=header)
+
+    hdu.header['SIMPLE'] = "T" # fits compliant format
+    if (precision.lower()=='double'):
+        hdu.header['BITPIX']=-64 # double precision float
+    elif (precision.lower()=='single'):
+        hdu.header['BITPIX']=-32 # single precision float
+    hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
+    hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
+    hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
+    #shdu.header['EXTEND'] = "T" # Fits data set may contain extensions
+    hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
+    hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
+    hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
+    hdu.header['BTYPE'] = 'Intensity'
+    hdu.header['ORIGIN'] = "BIPP"
+
+    hdu.writeto(f"{args.output}_lvls.fits", overwrite=True)
+    # instead of this, make wcs and store as header
+else:
+    I_lsq_eq_summed.to_fits(f"{args.output}.fits")
+    I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
