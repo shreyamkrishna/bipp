@@ -360,9 +360,10 @@ if (2 in plotList):
 if (3 in plotList):
     print ("Saving Eigenvalue Histogram")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
-    ax.hist(np.log10(Eigs), log=True, bins = 25) # modify this so that we can see if there is data 
+    #ax.hist(np.log10(Eigs), bins = 25) # modify this so that we can see if there is data
+    ax.hist(np.log10(Eigs), bins=20, density=True) # only for WL usecase
     ax.set_title("Eigenvalue Histogram")
-    ax.set_xlabel(r'$log_{10}(\lambda_{a})$')
+    ax.set_xlabel(r'$log_{10}(\lambda)$')
     ax.set_ylabel("Count")
     
     eigenvalue_binEdges = np.sort(np.unique(np.array(intensity_intervals))) [1:-1]  # select all but first and last bin edge (0 and 3e34)
@@ -463,7 +464,7 @@ if (std_img_flag):
     divider = make_axes_locatable(ax[1, 0])
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
     cbar = plt.colorbar(stdScale, cax)
-    cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+    cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
     cbar.formatter.set_powerlimits((0, 0))
     cbar.formatter.set_useMathText(True)
 
@@ -475,30 +476,30 @@ if (std_img_flag):
         divider = make_axes_locatable(ax[1, i+1])
         cax = divider.append_axes("right", size = "5%", pad = 0.05)
         cbar = plt.colorbar(stdScale, cax)
-        cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+        cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
         cbar.formatter.set_powerlimits((0, 0))
         cbar.formatter.set_useMathText(True)
 
 # Plot Lsq Summed Image    
-lsqScale = ax[0, 0].imshow(lsq_image)
-ax[0, 0].set_title("BB LSQ")
+lsqScale = ax[0, 0].imshow(lsq_image, cmap ='cubehelix')
+ax[0, 0].set_title("BIPP least-squares Image")
 ax[0, 0].axis('off')
 divider = make_axes_locatable(ax[0, 0])
 cax = divider.append_axes("right", size = "5%", pad = 0.05)
 cbar = plt.colorbar(lsqScale, cax)
-cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
 cbar.formatter.set_powerlimits((0, 0))
 cbar.formatter.set_useMathText(True)
 
 # Plot Lsq Level Image
 for i in np.arange(args.nlevel):
-    lsqScale = ax[0, i+1].imshow(lsq_levels[i, :, :])
-    ax[0, i+1].set_title(f"LSQ {i}")
+    lsqScale = ax[0, i+1].imshow(lsq_levels[i, :, :], cmap='cubehelix')
+    ax[0, i+1].set_title(f"BIPP Image Level {i}")
     ax[0, i+1].axis('off')
     divider = make_axes_locatable(ax[0, i+1])
     cax = divider.append_axes("right", size = "5%", pad = 0.05)
     cbar = plt.colorbar(lsqScale, cax)
-    cbar.set_label('Flux (Jy)', rotation=270, labelpad=40)
+    cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
     cbar.formatter.set_powerlimits((0, 0))
     cbar.formatter.set_useMathText(True)
 
@@ -547,7 +548,7 @@ if (outputCustomFitsFile):
 
     hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq.data),header=header)
 
-    hdu.header['SIMPLE'] = "T" # fits compliant format
+    hdu.header['SIMPLE'] = 'T' # fits compliant format
     if (precision.lower()=='double'):
         hdu.header['BITPIX']=-64 # double precision float
     elif (precision.lower()=='single'):
