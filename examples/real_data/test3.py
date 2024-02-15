@@ -376,8 +376,9 @@ if (3 in plotList):
     fig.tight_layout()
     fig.savefig(f"{args.output}_EigHist.png")
 
-
-print (f"Number of Eigenvalues:{N_eig}, Intensity intervals: {intensity_intervals}")
+np.set_printoptions(threshold=np.inf)
+print (f"Number of Eigenvalues:{N_eig}, \nIntensity intervals: {intensity_intervals}")
+np.set_printoptions(threshold=1000)
 print (f"Parameter Estimator takes: {tt.time() - pe_t} s")
 
 ########################################################################################
