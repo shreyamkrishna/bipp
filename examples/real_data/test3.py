@@ -375,10 +375,10 @@ if (3 in plotList):
     print(f"Eigs: {Eigs}")
     fig.tight_layout()
     fig.savefig(f"{args.output}_EigHist.png")
+    np.save(args.output+"_Eigs.npy", Eigs)
 
-np.set_printoptions(threshold=np.inf)
+
 print (f"Number of Eigenvalues:{N_eig}, \nIntensity intervals: {intensity_intervals}")
-np.set_printoptions(threshold=1000)
 print (f"Parameter Estimator takes: {tt.time() - pe_t} s")
 
 ########################################################################################
@@ -523,7 +523,7 @@ if (outputCustomFitsFile):
     header = w.to_header()
     hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq_summed.data),header=header)
 
-    hdu.header['SIMPLE'] = "T" # fits compliant format
+    #hdu.header['SIMPLE'] = "T" # fits compliant format
     if (precision.lower()=='double'):
         hdu.header['BITPIX']=-64 # double precision float
     elif (precision.lower()=='single'):
@@ -544,7 +544,7 @@ if (outputCustomFitsFile):
     for i in np.arange(args.nlevel):
         hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq.data[i, :, :]),header=header)
 
-        hdu.header['SIMPLE'] = 'T' # fits compliant format
+        #hdu.header['SIMPLE'] = 'T' # fits compliant format
         if (precision.lower()=='double'):
             hdu.header['BITPIX']=-64 # double precision float
         elif (precision.lower()=='single'):
