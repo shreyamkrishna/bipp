@@ -523,7 +523,7 @@ if (outputCustomFitsFile):
     header = w.to_header()
     hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq_summed.data),header=header)
 
-    #hdu.header['SIMPLE'] = "T" # fits compliant format
+    #hdu.header['SIMPLE'] = 'T' # fits compliant format  # not needed
     if (precision.lower()=='double'):
         hdu.header['BITPIX']=-64 # double precision float
     elif (precision.lower()=='single'):
@@ -539,19 +539,22 @@ if (outputCustomFitsFile):
     hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
     hdu.header['BTYPE'] = 'Intensity'
     hdu.header['ORIGIN'] = "BIPP"
+    hdu.header['CTYPE3'] = 'FREQ'
+    hdu.header['CRVAL3'] = frequency.to_value(u.Hz)
+    hdu.header['CRPIX3'] = 1
+    hdu.header['CUNIT3'] = 'Hz'
     hdu.header['HISTORY'] = sys.argv[:]
 
     hdu.writeto(f"{args.output}_summed.fits", overwrite=True)
-
     for i in np.arange(args.nlevel):
-        hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq.data[i, :, :]),header=header)
+        hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq.data[i,:,:]),header=header)
 
-        #hdu.header['SIMPLE'] = 'T' # fits compliant format
+        #hdu.header['SIMPLE'] = 'T' # fits compliant format # not needed
         if (precision.lower()=='double'):
             hdu.header['BITPIX']=-64 # double precision float
         elif (precision.lower()=='single'):
             hdu.header['BITPIX']=-32 # single precision float
-        hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
+        hdu.header['NAXIS'] = 3 # Number of axes - 2 for image data, 3 for data cube
         hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
         hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
         hdu.header['NAXIS3'] = 1
@@ -574,10 +577,14 @@ if (outputCustomFitsFile):
         hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
         hdu.header['BTYPE'] = 'Intensity'
         hdu.header['ORIGIN'] = "BIPP"
+        hdu.header['CTYPE3'] = 'FREQ'
+        hdu.header['CRVAL3'] = frequency.to_value(u.Hz)
+        hdu.header['CRPIX3'] = 1
+        hdu.header['CUNIT3'] = 'Hz'
         hdu.header['HISTORY'] = sys.argv[:]
 
         hdu.writeto(f"{args.output}_lvl{i}.fits", overwrite=True)
-
+        # instead of this, make wcs and store as header
 else:
     I_lsq_eq_summed.to_fits(f"{args.output}_summed.fits")
-    I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
+    I_lsq_eq.to_fits(f"{args.output}_lvls.fits") # outputs all levels in one fits file - not optimal.
