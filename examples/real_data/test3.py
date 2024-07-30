@@ -316,7 +316,7 @@ I_est = bb_pe.IntensityFieldParameterEstimator(args.nlevel, sigma=1, ctx=ctx)
 #for t, f, S, uvw_t in ProgressBar(
 for t, f, S in ProgressBar(
         #ms.visibilities(channel_id=[channel_id], time_id=slice(timeStart, timeEnd, 1), column=args.column, return_UVW = True)
-        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 50), column=args.column)
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
 ):
     wl = constants.speed_of_light / f.to_value(u.Hz)
     XYZ = ms.instrument(t)
@@ -362,7 +362,7 @@ if (3 in plotList):
     print ("Saving Eigenvalue Histogram")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
     #ax.hist(np.log10(Eigs), bins = 25) # modify this so that we can see if there is data
-    ax.hist(np.log10(Eigs), bins=20, density=True) # only for WL usecase
+    ax.hist(np.log10(Eigs), bins=20) # only for WL usecase
     ax.set_title("Eigenvalue Histogram")
     ax.set_xlabel(r'$log_{10}(\lambda)$')
     ax.set_ylabel("Count")
@@ -449,67 +449,6 @@ lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
 
 lsq_image = lsq_levels.sum(axis = 0)
 
-fig, ax = plt.subplots(1, args.nlevel+1, figsize = (20*(args.nlevel+1), 20))
-
-if (std_img_flag):
-
-    fig, ax = plt.subplots(2, args.nlevel+1, figsize=(20*(args.nlevel + 1), 40))
-
-    std_levels = I_std_eq.data  # Nlevel, Npix, Npix
-
-    std_image = std_levels.sum(axis = 0)
-
-    # Plot Std Summed Image
-    stdScale = ax[1,0].imshow(std_image)
-    ax[1, 0].set_title("BB STD")
-    ax[1, 0].axis('off')
-    divider = make_axes_locatable(ax[1, 0])
-    cax = divider.append_axes("right", size = "5%", pad = 0.05)
-    cbar = plt.colorbar(stdScale, cax)
-    cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
-    cbar.formatter.set_powerlimits((0, 0))
-    cbar.formatter.set_useMathText(True)
-
-    # Plot Std Level Images  
-    for i in np.arange(args.nlevel):
-        stdScale = ax[1, i+1].imshow(std_levels[i, :, :])
-        ax[1, i+1].set_title(f"STD {i}")
-        ax[1, i+1].axis('off')
-        divider = make_axes_locatable(ax[1, i+1])
-        cax = divider.append_axes("right", size = "5%", pad = 0.05)
-        cbar = plt.colorbar(stdScale, cax)
-        cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
-        cbar.formatter.set_powerlimits((0, 0))
-        cbar.formatter.set_useMathText(True)
-
-# Plot Lsq Summed Image    
-lsqScale = ax[0, 0].imshow(lsq_image, cmap ='cubehelix')
-ax[0, 0].set_title("BIPP least-squares Image")
-ax[0, 0].axis('off')
-divider = make_axes_locatable(ax[0, 0])
-cax = divider.append_axes("right", size = "5%", pad = 0.05)
-cbar = plt.colorbar(lsqScale, cax)
-cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
-cbar.formatter.set_powerlimits((0, 0))
-cbar.formatter.set_useMathText(True)
-
-# Plot Lsq Level Image
-for i in np.arange(args.nlevel):
-    lsqScale = ax[0, i+1].imshow(lsq_levels[i, :, :], cmap='cubehelix')
-    ax[0, i+1].set_title(f"BIPP Image Level {i}")
-    ax[0, i+1].axis('off')
-    divider = make_axes_locatable(ax[0, i+1])
-    cax = divider.append_axes("right", size = "5%", pad = 0.05)
-    cbar = plt.colorbar(lsqScale, cax)
-    cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
-    cbar.formatter.set_powerlimits((0, 0))
-    cbar.formatter.set_useMathText(True)
-
-fig.savefig(f"{args.output}.png")
-
-print (f"Plotting and fits output time:{tt.time() - pf_t} s")
-print (f"Total time: {tt.time()- start_time} s")
-
 if (outputCustomFitsFile):
 
     w = awcs.WCS(naxis=2)
@@ -572,3 +511,66 @@ if (outputCustomFitsFile):
 else:
     I_lsq_eq_summed.to_fits(f"{args.output}_summed.fits")
     I_lsq_eq.to_fits(f"{args.output}_lvls.fits") # outputs all levels in one fits file - not optimal.
+
+fig, ax = plt.subplots(1, args.nlevel+1, figsize = (20*(args.nlevel+1), 20))
+
+if (std_img_flag):
+
+    fig, ax = plt.subplots(2, args.nlevel+1, figsize=(20*(args.nlevel + 1), 40))
+
+    std_levels = I_std_eq.data  # Nlevel, Npix, Npix
+
+    std_image = std_levels.sum(axis = 0)
+
+    # Plot Std Summed Image
+    stdScale = ax[1,0].imshow(std_image)
+    ax[1, 0].set_title("BB STD")
+    ax[1, 0].axis('off')
+    divider = make_axes_locatable(ax[1, 0])
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(stdScale, cax)
+    cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
+    cbar.formatter.set_powerlimits((0, 0))
+    cbar.formatter.set_useMathText(True)
+
+    # Plot Std Level Images  
+    for i in np.arange(args.nlevel):
+        stdScale = ax[1, i+1].imshow(std_levels[i, :, :])
+        ax[1, i+1].set_title(f"STD {i}")
+        ax[1, i+1].axis('off')
+        divider = make_axes_locatable(ax[1, i+1])
+        cax = divider.append_axes("right", size = "5%", pad = 0.05)
+        cbar = plt.colorbar(stdScale, cax)
+        cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
+        cbar.formatter.set_powerlimits((0, 0))
+        cbar.formatter.set_useMathText(True)
+
+# Plot Lsq Summed Image
+
+lsqScale = ax[0, 0].imshow(lsq_image, cmap ='cubehelix')
+ax[0, 0].set_title("BIPP least-squares Image")
+ax[0, 0].axis('off')
+divider = make_axes_locatable(ax[0, 0])
+cax = divider.append_axes("right", size = "5%", pad = 0.05)
+cbar = plt.colorbar(lsqScale, cax)
+cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
+cbar.formatter.set_powerlimits((0, 0))
+cbar.formatter.set_useMathText(True)
+
+# Plot Lsq Level Image
+for i in np.arange(args.nlevel):
+    lsqScale = ax[0, i+1].imshow(lsq_levels[i, :, :], cmap='cubehelix')
+    ax[0, i+1].set_title(f"BIPP Image Level {i}")
+    ax[0, i+1].axis('off')
+    divider = make_axes_locatable(ax[0, i+1])
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(lsqScale, cax)
+    cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
+    cbar.formatter.set_powerlimits((0, 0))
+    cbar.formatter.set_useMathText(True)
+
+fig.savefig(f"{args.output}.png")
+
+print (f"Plotting and fits output time:{tt.time() - pf_t} s")
+print (f"Total time: {tt.time()- start_time} s")
+
