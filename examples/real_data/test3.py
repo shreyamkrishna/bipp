@@ -454,10 +454,10 @@ if (outputCustomFitsFile):
     w = awcs.WCS(naxis=2)
 
     
-    w.wcs.crpix = np.array([args.npix//2 + 1, args.npix//2 + 1])
-    w.wcs.cdelt = np.array([-np.rad2deg(args.fov)/args.npix, np.rad2deg(args.fov)/args.npix])
-    w.wcs.crval = np.array([field_center.ra.deg, field_center.dec.deg])
-    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
+    w.wcs.crpix = np.array([args.npix//2 + 1, args.npix//2 + 1, 1, 1])
+    w.wcs.cdelt = np.array([-np.rad2deg(args.fov)/args.npix, np.rad2deg(args.fov)/args.npix, 1, 1])
+    w.wcs.crval = np.array([field_center.ra.deg, field_center.dec.deg, frequency, 1])
+    w.wcs.ctype = ["RA---SIN", "DEC--SIN", "FREQ", "STOKES"]
 
     header = w.to_header()
     hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq_summed.data),header=header)
@@ -467,10 +467,12 @@ if (outputCustomFitsFile):
         hdu.header['BITPIX']=-64 # double precision float
     elif (precision.lower()=='single'):
         hdu.header['BITPIX']=-32 # single precision float
-    hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
+    hdu.header['NAXIS'] = 4 # Number of axes - 2 for image data, 3 for data cube
     hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
     hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
     hdu.header['NAXIS3'] = 1
+    hdu.header['NAXIS4'] = 1
+    #shdu.header['EXTEND'] = "T" # Fits data set may contain extensions
     hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
     hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
     hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
@@ -495,6 +497,20 @@ if (outputCustomFitsFile):
         hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
         hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
         hdu.header['NAXIS3'] = 1
+        hdu.header['NAXIS4'] = 1
+        """
+        CTYPE3  = 'FREQ    '           / Central frequency                              
+        CRPIX3  =                   1.                                                  
+        CRVAL3  =          1500000000.                                                  
+        CDELT3  =                   1.                                                  
+        CUNIT3  = 'Hz      '                                                            
+        CTYPE4  = 'STOKES  '                                                            
+        CRPIX4  =                   1.                                                  
+        CRVAL4  =                   1.                                                  
+        CDELT4  =                   1.                                                  
+        CUNIT4  = '        '            
+        """
+        #shdu.header['EXTEND'] = "T" # Fits data set may contain extensions
         hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
         hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
         hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
