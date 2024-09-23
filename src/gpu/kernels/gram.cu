@@ -25,6 +25,7 @@ template <typename T>
 static __global__ void gram_kernel(std::size_t n, const T* __restrict__ x, const T* __restrict__ y,
                                    const T* __restrict__ z, T wl,
                                    api::ComplexType<T>* __restrict__ g, std::size_t ldg) {
+
   for (std::size_t j = threadIdx.y + blockIdx.y * blockDim.y; j < n; j += gridDim.y * blockDim.y) {
     T x1 = x[j];
     T y1 = y[j];
@@ -46,12 +47,9 @@ auto gram(Queue& q, std::size_t n, const T* x, const T* y, const T* z, T wl, api
           std::size_t ldg) -> void {
   const int blockSizeX = std::min<int>(16, q.device_prop().maxThreadsDim[0]);
   const int blockSizeY = std::min<int>(16, q.device_prop().maxThreadsDim[1]);
-
   const dim3 block(blockSizeX, blockSizeY, 1);
   const auto grid = kernel_launch_grid(q.device_prop(), {n, n, 1}, block);
-
-  api::launch_kernel(gram_kernel<T>, grid, block, 0, q.stream(), n, x, y, z,
-                     T(2 * 3.14159265358979323846 / wl), g, ldg);
+  api::launch_kernel(gram_kernel<T>, grid, block, 0, q.stream(), n, x, y, z, wl, g, ldg);
 }
 
 template auto gram<float>(Queue& q, std::size_t n, const float* x, const float* y, const float* z,

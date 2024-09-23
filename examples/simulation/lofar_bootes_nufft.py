@@ -28,6 +28,7 @@ import bipp.statistics as statistics
 import bipp.filter
 import time as tt
 import matplotlib.pyplot as plt
+import sys
 
 
 comm = bipp.communicator.world()
@@ -87,7 +88,7 @@ precision = "single"
 
 
 # Imaging
-N_pix = 350
+N_pix = 1024
 
 t1 = tt.time()
 N_level = 3
@@ -122,7 +123,7 @@ imager = bipp.NufftSynthesis(
     lmn_grid[0],
     lmn_grid[1],
     lmn_grid[2],
-    precision,
+    precision    #,True # eigenvalue filtering boolean
 )
 
 for t in ProgressBar(time[::time_slice]):
@@ -158,6 +159,8 @@ ax.set_title(
     f"Bootes Field: {sky_model.intensity.size} sources (simulated), LOFAR: {N_station} stations, FoV: {np.round(FoV * 180 / np.pi)} degrees.\n"
     f"Run time {np.floor(t2 - t1)} seconds."
 )
+plt.savefig("BB_lsq.png")
+
 
 plt.figure()
 ax = plt.gca()
@@ -178,17 +181,20 @@ plt.savefig("nufft_synthesis_std.png")
 plt.figure()
 titles = ["Strong sources", "Mild sources", "Faint Sources"]
 for i in range(lsq_image.shape[0]):
-    plt.subplot(1, N_level, i + 1)
-    ax = plt.gca()
-    plt.title(titles[i])
+    ax[i + 1].set_title(titles[i])
     I_lsq_eq.draw(
         index=i,
         catalog=sky_model.xyz.T,
-        ax=ax,
+        ax=ax[i + 1],
         data_kwargs=dict(cmap="cubehelix"),
         catalog_kwargs=dict(s=30, linewidths=0.5, alpha=0.5),
         show_gridlines=False,
     )
+ax[0].set_title("LSQ IMAGE")
+I_lsq_eq.draw(ax = ax[0], data_kwargs=dict(cmap="cubehelix"), catalog_kwargs=dict(s=30, linewidths=0.5, alpha=0.5), show_gridlines=False, catalog=sky_model.xyz.T)
+
+print (I_lsq_eq.data.sum(axis = 0))
+
 
 plt.suptitle(f"Bipp Eigenmaps")
 plt.savefig("nufft_synthesis_lsq.png")

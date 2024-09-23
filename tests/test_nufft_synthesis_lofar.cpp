@@ -178,3 +178,4 @@ INSTANTIATE_TEST_SUITE_P(Lofar, NufftSynthesisLofarSingle,
 INSTANTIATE_TEST_SUITE_P(Lofar, NufftSynthesisLofarDouble,
                          ::testing::Combine(::testing::Values(TEST_PROCESSING_UNITS)),
                          param_type_names);
+

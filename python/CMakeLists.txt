@@ -36,6 +36,7 @@ set(BIPP_PYTHON_SRC
 	instrument.py
 	core.py
 	frame.py
+	measurement_set.py
 	statistics.py
 	beamforming.py
 	filter.py

@@ -1,0 +1,24 @@
+diff --git a/src/gpu/eigensolver.cpp b/src/gpu/eigensolver.cpp
+index c55e460..58aa16b 100644
+--- a/src/gpu/eigensolver.cpp
++++ b/src/gpu/eigensolver.cpp
+@@ -21,6 +21,7 @@ template <typename T>
+ auto eigh(ContextInternal& ctx, std::size_t m, std::size_t nEig, const api::ComplexType<T>* a,
+           std::size_t lda, const api::ComplexType<T>* b, std::size_t ldb, T* d,
+           api::ComplexType<T>* v, std::size_t ldv) -> void {
++  b = nullptr;
+   // TODO: add fill mode
+   using ComplexType = api::ComplexType<T>;
+   using ScalarType = T;
+diff --git a/src/host/eigensolver.cpp b/src/host/eigensolver.cpp
+index 9b970ef..c25bd80 100644
+--- a/src/host/eigensolver.cpp
++++ b/src/host/eigensolver.cpp
+@@ -43,6 +43,7 @@ template <typename T>
+ auto eigh(ContextInternal& ctx, std::size_t m, std::size_t nEig, const std::complex<T>* a,
+           std::size_t lda, const std::complex<T>* b, std::size_t ldb, T* d, std::complex<T>* v,
+           std::size_t ldv) -> void {
++  b = nullptr;
+   auto bufferA = Buffer<std::complex<T>>(ctx.host_alloc(), m * m);
+   auto bufferV = Buffer<std::complex<T>>(ctx.host_alloc(), m * m);
+   auto bufferD = Buffer<T>(ctx.host_alloc(), m);
