@@ -135,7 +135,7 @@ class ParameterEstimator:
             return 0
         return self._intervals.shape[0]
 
-    def infer_parameters(self):
+    def infer_parameters(self,return_eigenvalues=False):
         """
         Estimate parameters given ingested data.
 
@@ -155,4 +155,7 @@ class ParameterEstimator:
         min_pos_d = np.min(D_all) if self._fne else 0
         
         self._intervals = centroid_to_intervals(cluster_centroid, min_pos_d, self._fne)
-        return self._intervals
+        if not return_eigenvalues:
+            return self._intervals
+        else: 
+            return D_all, self._intervals

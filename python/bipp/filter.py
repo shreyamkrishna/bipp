@@ -8,7 +8,7 @@ def apply_filter(f, D):
     if f == 'lsq':
         return D
     if f == 'std':
-        D[D >= 0] = 1
+        D[D > 0] = 1
         D[D < 0] = -1
         return D
     if f == 'sqrt':
