@@ -1,0 +1,19 @@
+diff --git a/src/host/eigensolver.cpp b/src/host/eigensolver.cpp
+index 8b5e819..ca422e3 100644
+--- a/src/host/eigensolver.cpp
++++ b/src/host/eigensolver.cpp
+@@ -112,12 +112,8 @@ auto eigh(ContextInternal& ctx, T wl, ConstHostView<std::complex<T>, 2> s,
+       copy(w.slice_view(indices[i]), wReduced.slice_view(i));
+     }
+ 
+-    // Compute gram matrix
+-    auto gReduced = HostArray<std::complex<T>, 2>(ctx.host_alloc(), {nBeamReduced, nBeamReduced});
+-    gram_matrix<T>(ctx, wReduced, xyz, wl, gReduced);
+-
+-    lapack::eigh_solve(LapackeLayout::COL_MAJOR, 1, mode, 'L', nBeamReduced, v.data(), v.strides(1),
+-                       gReduced.data(), gReduced.strides(1), d.data());
++    lapack::eigh_solve(LapackeLayout::COL_MAJOR, mode, 'L', nBeamReduced, v.data(), v.strides(1),
++                       d.data());
+ 
+     if (vUnbeam.size())
+       blas::gemm<std::complex<T>>(CblasNoTrans, CblasNoTrans, {1, 0}, wReduced, v, {0, 0},
