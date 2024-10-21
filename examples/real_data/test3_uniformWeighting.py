@@ -24,7 +24,6 @@ import bipp.measurement_set as measurement_set
 import time as tt
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from matplotlib.ticker import AutoMinorLocator
 from matplotlib.colors import TwoSlopeNorm
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -232,7 +231,7 @@ precision = 'double'
 
 # Create context with selected processing unit.
 # Options are "AUTO", "CPU" and "GPU".
-ctx = bipp.Context("CPU")
+ctx = bipp.Context("GPU")
 
 filter_tuple = ['lsq','std'] # might need to make this a list
 
@@ -240,7 +239,7 @@ filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([3,4]) # 3 is eigenvalue historgram , 4 is visibility output
+plotList= np.array([3,])
 
 outputCustomFitsFile = True
 # 1 is Gram Matrix plotted via imshow
@@ -248,6 +247,10 @@ outputCustomFitsFile = True
 #######################################################################################################################################################
 # Observation set up ########################################################################################
 #######################################################################################################################################################
+
+#ms = measurement_set.MwaMeasurementSet(ms_file)
+#N_antenna = 128 # change this to get this from measurement set
+#N_station = 128
 
 if (channelEnd - channelStart == 1): 
     frequency = ms.channels["FREQUENCY"][channelStart:channelEnd]
@@ -261,6 +264,7 @@ else:
 
 
 wl = constants.speed_of_light / frequency.to_value(u.Hz)
+wlg = constants.speed_of_light / frequency.to_value(u.Hz)
 print (f"wl:{wl}; f: {frequency}")
 
 if (args.grid == "ms"):
@@ -307,7 +311,14 @@ opt.set_collect_group_size(None)
 #opt.set_local_uvw_partition(bipp.Partition.none()) # Commented out
 opt.set_local_image_partition(bipp.Partition.grid([1,1,1]))
 opt.set_local_uvw_partition(bipp.Partition.grid([args.partition,args.partition,1]))
-opt.set_normalize_image_by_nvis(True)
+
+# to activate/desactivate for natural/uniform weighting
+#################################################################
+opt.set_normalize_image_by_nvis(False)
+opt.set_normalize_image(False)
+################################################################
+
+
 #opt.set_local_image_partition(bipp.Partition.auto())
 #opt.set_local_uvw_partition(bipp.Partition.auto())
 print("N_pix = ", args.npix)
@@ -321,9 +332,10 @@ print (f"Initial set up takes {tt.time() - start_time} s")
 ########################################################################################
 pe_t = tt.time()
 print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@ PARAMETER ESTIMATION @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n")
-I_est = bb_pe.ParameterEstimator(args.nlevel, sigma=1, ctx=ctx, fne=False)
+num_time_steps = 0
+I_est = bb_pe.ParameterEstimator(args.nlevel, sigma=1, ctx=ctx)
 for t, f, S in ProgressBar(
-        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 50), column=args.column)
 ):
     wl = constants.speed_of_light / f.to_value(u.Hz)
     XYZ = ms.instrument(t)
@@ -332,37 +344,9 @@ for t, f, S in ProgressBar(
     G = gram(XYZ, W, wl)
     S, _ = measurement_set.filter_data(S, W)
     I_est.collect(wl, S.data, W.data, XYZ.data)
+    num_time_steps +=1
 
-Eigs, intervals = I_est.infer_parameters(return_eigenvalues=True)
-
-if (clusteringBool == False) :
-    intervals = clustering
-    
-print (f"Eigs {Eigs} \nIntervals: {intervals}")
-if (3 in plotList):
-    print ("Saving Eigenvalue Histogram")
-    fig, ax = plt.subplots(1,1, figsize=(20,20))
-    #ax.hist(np.log10(Eigs), bins = 25) # modify this so that we can see if there is data
-    ax.hist(np.log10(Eigs), bins=2000) # only for WL usecase
-    ax.set_title("Eigenvalue Histogram")
-    ax.set_xlabel(r'$log_{10}(\lambda)$')
-    ax.set_ylabel("Count")
-    
-    eigenvalue_binEdges = np.sort(np.unique(np.array(intervals))) [1:-1]  # select all but first and last bin edge (0 and 3e34)
-
-    for eigenvalue_binEdge in eigenvalue_binEdges:
-        ax.axvline(np.log10(eigenvalue_binEdge), color="r")
-    print(f"Max Eigenvalue (log):{np.log10(Eigs.max())}, Min Eigenvalue (log): {np.log10(Eigs.min())}")
-    print(f"Eigs: {Eigs}")
-
-    ax.xaxis.set_minor_locator(AutoMinorLocator(10))
-
-    fig.tight_layout()
-    fig.savefig(f"{args.output}_EigHist.png")
-    np.save(args.output+"_Eigs.npy", Eigs)
-
-print(f"Number of Eigenvalues={Eigs.shape[0]} intervals={intervals}")
-
+intervals = I_est.infer_parameters()
 fi = bipp.filter.Filter(lsq=intervals, std=intervals)
 
 
@@ -382,8 +366,79 @@ imager = bipp.NufftSynthesis(
     lmn_grid[2],
     precision,
 )
+##########################################################################
+###########################
+def gridding(N, du, u, v):
+    grid_start = -N//2 * du
+    grid_end = N//2 * du
+    xedges = np.linspace(grid_start, grid_end, N+1)
+    yedges = np.linspace(grid_start, grid_end, N+1)
+    counts, _, _ = np.histogram2d(u, v, bins=[xedges, yedges])
+    with np.errstate(divide='ignore', invalid='ignore'):
+        inv_counts = np.true_divide(1, counts)
+        inv_counts[~np.isfinite(inv_counts)] = 0
+    return xedges, yedges, counts, inv_counts
 
 
+def weighting(u, v, xedges, yedges, counts):
+    x_idx = np.digitize(u, xedges) - 1
+    y_idx = np.digitize(v, yedges) - 1
+    x_idx = np.clip(x_idx, 0, len(xedges)-2)
+    y_idx = np.clip(y_idx, 0, len(yedges)-2)
+    assigned_weights = counts[x_idx, y_idx]
+    for i in range(len(u)):
+        if u[i]<xedges[0] or u[i]>xedges[-1] or v[i]<yedges[0] or v[i]>yedges[-1]:
+            assigned_weights[i] = 0.0
+    return assigned_weights  
+
+
+##########################################################################
+###########################
+
+###################### extract uv
+print('getting uv')
+uu = []
+vv = []
+for t, f, S in ProgressBar(
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
+):
+    wl = constants.speed_of_light / f.to_value(u.Hz)
+    UVW_baselines_t = ms.instrument.baselines(t, uvw=True, field_center=ms.field_center)
+    uvw = frame.reshape_and_scale_uvw(wl, UVW_baselines_t)
+    ut, vt, wt = uvw.T
+    uu.extend(ut)
+    vv.extend(vt)
+    
+uu = np.array(uu)
+vv = np.array(vv)
+
+###################### gridding
+print('len uu=', len(uu))
+
+print('max u = ',np.max(uu))
+print('min u = ',np.min(uu))
+
+N = args.npix
+fov = args.fov
+print('N = ',N)
+print('fov rad = ', fov)
+
+
+print('wl = ', wlg)
+du = 1/fov * wlg
+print('du = ',du)
+print('gridding')
+xedges, yedges, counts, inv_counts  = gridding(N, du, uu, vv)
+print('max xedges = ', np.max(xedges))
+print('max yedges = ', np.max(yedges))
+
+ww = weighting(uu, vv, xedges, yedges, inv_counts)
+n_factor = float(np.count_nonzero(counts))
+print("non zero cells = ",n_factor)
+
+print('sum of the weights = ', np.sum(ww))
+
+W_glob = 0
 #########################################################################################
 ###########################
 for t, f, S in ProgressBar(
@@ -400,7 +455,21 @@ for t, f, S in ProgressBar(
     if np.allclose(S.data, np.zeros(S.data.shape)):
         continue
     ##### un comment for natural weighting
-    imager.collect(wl, fi, S.data, W.data, XYZ.data, uvw)
+    #imager.collect(wl, fi, S.data, W.data, XYZ.data, uvw)
+
+    ###################### weighting the visibility with the grid
+    new_S = S.data.T.reshape(-1, order="F")
+    ut, vt, wt = uvw.T
+    w = weighting(ut, vt, xedges, yedges, inv_counts)
+    W_glob += np.sum(w)
+    #### un comment for getting the psf
+    #new_S = np.full(new_S.shape, 1 + 1j)*w#new_S*w
+    new_S = new_S*w
+    new_S = new_S.reshape((S.data.shape[0], S.data.shape[0]), order="F").T
+    imager.collect(wl, fi, new_S, W.data, XYZ.data, uvw)
+    
+print("sum of w=",W_glob)
+
 
 images = imager.get().reshape((-1, args.npix, args.npix))
 
@@ -413,11 +482,14 @@ I_std_eq = s2image.Image(std_image, xyz_grid)
 
 print("lsq_image.shape =", lsq_image.shape)
 
-print (I_lsq_eq.data.mean())
-
 #############################################
-I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel +1 ,lsq_image.shape[-2], lsq_image.shape[-1]).sum(axis = 0), xyz_grid)
+I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2], lsq_image.shape[-1]).sum(axis = 0), xyz_grid)
 
+# I_lsq_eq_summed should be divided b W_glob
+# I_lsq_eq_summed = I_lsq_eq_summed / W_glob
+# but it returns the error:
+# TypeError: unsupported operand type(s) for /: 'Image' and 'float'
+# Instead do it manually after 
 
 
 
@@ -436,11 +508,11 @@ I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel +1 ,lsq_image.shap
 ########################################## Plotting and output of .fits file #####################################################
 ####################################################################################################################################
 
-pf_t = tt.time()
+#pf_t = tt.time()
 
-lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
+#lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
 
-lsq_image = lsq_levels.sum(axis = 0)
+#lsq_image = lsq_levels.sum(axis = 0)
 
 if (outputCustomFitsFile):
 
@@ -455,6 +527,7 @@ if (outputCustomFitsFile):
     header = w.to_header()
     hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq_summed.data),header=header)
 
+    #hdu.header['SIMPLE'] = "T" # fits compliant format
     if (precision.lower()=='double'):
         hdu.header['BITPIX']=-64 # double precision float
     elif (precision.lower()=='single'):
@@ -498,64 +571,8 @@ else:
     I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
 
 
-fig, ax = plt.subplots(1, args.nlevel+1, figsize = (20*(args.nlevel+1), 20))
 
-if (std_img_flag):
 
-    fig, ax = plt.subplots(2, args.nlevel+1, figsize=(20*(args.nlevel + 1), 40))
 
-    std_levels = I_std_eq.data  # Nlevel, Npix, Npix
 
-    std_image = std_levels.sum(axis = 0)
 
-    # Plot Std Summed Image
-    stdScale = ax[1,0].imshow(std_image, cmap='cubehelix')
-    ax[1, 0].set_title("BB STD")
-    ax[1, 0].axis('off')
-    divider = make_axes_locatable(ax[1, 0])
-    cax = divider.append_axes("right", size = "5%", pad = 0.05)
-    cbar = plt.colorbar(stdScale, cax)
-    cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
-    cbar.formatter.set_powerlimits((0, 0))
-    cbar.formatter.set_useMathText(True)
-
-    # Plot Std Level Images  
-    for i in np.arange(args.nlevel):
-        stdScale = ax[1, i+1].imshow(std_levels[i, :, :],cmap='cubehelix')
-        ax[1, i+1].set_title(f"STD {i}")
-        ax[1, i+1].axis('off')
-        divider = make_axes_locatable(ax[1, i+1])
-        cax = divider.append_axes("right", size = "5%", pad = 0.05)
-        cbar = plt.colorbar(stdScale, cax)
-        cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
-        cbar.formatter.set_powerlimits((0, 0))
-        cbar.formatter.set_useMathText(True)
-
-# Plot Lsq Summed Image
-
-lsqScale = ax[0, 0].imshow(lsq_image, cmap ='cubehelix')
-ax[0, 0].set_title("BIPP least-squares Image")
-ax[0, 0].axis('off')
-divider = make_axes_locatable(ax[0, 0])
-cax = divider.append_axes("right", size = "5%", pad = 0.05)
-cbar = plt.colorbar(lsqScale, cax)
-cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
-cbar.formatter.set_powerlimits((0, 0))
-cbar.formatter.set_useMathText(True)
-
-# Plot Lsq Level Image
-for i in np.arange(args.nlevel):
-    lsqScale = ax[0, i+1].imshow(lsq_levels[i, :, :], cmap='cubehelix')
-    ax[0, i+1].set_title(f"BIPP Image Level {i}")
-    ax[0, i+1].axis('off')
-    divider = make_axes_locatable(ax[0, i+1])
-    cax = divider.append_axes("right", size = "5%", pad = 0.05)
-    cbar = plt.colorbar(lsqScale, cax)
-    cbar.set_label('Flux (Jy/Beam)', rotation=270, labelpad=40)
-    cbar.formatter.set_powerlimits((0, 0))
-    cbar.formatter.set_useMathText(True)
-
-fig.savefig(f"{args.output}.png")
-
-print (f"Plotting and fits output time:{tt.time() - pf_t} s")
-print (f"Total time: {tt.time()- start_time} s")
