@@ -240,7 +240,7 @@ filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([3,4]) # 3 is eigenvalue historgram , 4 is visibility output
+plotList= np.array([1,3]) # 3 is eigenvalue historgram , 4 is visibility output
 
 outputCustomFitsFile = True
 # 1 is Gram Matrix plotted via imshow
@@ -331,7 +331,9 @@ for t, f, S in ProgressBar(
     W = ms.beamformer(XYZ, wl)
     G = gram(XYZ, W, wl)
     S, _ = measurement_set.filter_data(S, W)
-    I_est.collect(wl, S.data, W.data, XYZ.data)
+    S_new = np.ones_like(S.data)
+    ##### un comment for natural weighting
+    I_est.collect(wl, S_new, W.data, XYZ.data)
 
 Eigs, intervals = I_est.infer_parameters(return_eigenvalues=True)
 
@@ -339,6 +341,21 @@ if (clusteringBool == False) :
     intervals = clustering
     
 print (f"Eigs {Eigs} \nIntervals: {intervals}")
+if (1 in plotList):
+    print ("Saving Gram Matrix")
+    fig, ax = plt.subplots(1,1, figsize = (20,20))
+    gramScale = ax.imshow(np.abs(G.data) + 1e-5, cmap='cubehelix', norm=LogNorm())
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size = "5%", pad = 0.05)
+    cbar = plt.colorbar(gramScale, cax)
+    cbar.set_label('Magnitude', rotation=270, labelpad=40)
+
+    ax.set_title("SKA Low Gram Matrix")
+    ax.set_xlabel("Antenna Number")
+    ax.set_ylabel("Antenna Number")
+    fig.savefig(f"{args.output}_gram.png")
+    fig.savefig(f"{args.output}_gram.pdf")
+
 if (3 in plotList):
     print ("Saving Eigenvalue Histogram")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
@@ -399,8 +416,10 @@ for t, f, S in ProgressBar(
     uvw = frame.reshape_and_scale_uvw(wl, UVW_baselines_t)
     if np.allclose(S.data, np.zeros(S.data.shape)):
         continue
+
+    S_new = np.ones_like(S.data)
     ##### un comment for natural weighting
-    imager.collect(wl, fi, S.data, W.data, XYZ.data, uvw)
+    imager.collect(wl, fi, S_new, W.data, XYZ.data, uvw)
 
 images = imager.get().reshape((-1, args.npix, args.npix))
 
