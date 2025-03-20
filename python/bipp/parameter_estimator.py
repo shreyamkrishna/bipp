@@ -26,6 +26,7 @@ import bipp.statistics as vis
 import bipp.gram as gr
 import bipp.filter
 import bipp.pybipp
+import scipy.linalg as linalg
 
 def centroid_to_intervals(centroid=None, min_pos_d=0.0, fne=True):
     r"""
@@ -107,6 +108,7 @@ class ParameterEstimator:
         self._ctx = ctx
         self._inferred = False
         self._fne = fne
+        self._v = []
 
     def collect(self, wl, S, W, XYZ):
         """
@@ -118,6 +120,8 @@ class ParameterEstimator:
             G : :py:class:`~bipp.phased_array.bipp.gram.GramMatrix`
                 (N_beam, N_beam) gram matrix.
         """
+        """
+        #Etienne's code:
         D =  bipp.pybipp.eigh(self._ctx, wl, S, W, XYZ)
         D = D[D > 0.0]
         D = D[np.argsort(D)[::-1]]
@@ -126,8 +130,13 @@ class ParameterEstimator:
             idx = np.clip(np.cumsum(D) / np.sum(D), 0, 1) <= self._sigma
             Dc = D[idx]
             self._d_all_clipped.append(Dc)
-        
         self._inferred = False
+        """
+        D, V = linalg.eigh(S)
+        
+        self._d_all.append(D)
+        self._inferred = False
+        self._v.append(V)
 
     def num_level(self):
         if not self._inferred:
@@ -136,7 +145,7 @@ class ParameterEstimator:
             return 0
         return self._intervals.shape[0]
 
-    def infer_parameters(self):
+    def infer_parameters(self,return_eigenvalues=False, return_eigenvectors=False):
         """
         Estimate parameters given ingested data.
 
@@ -152,7 +161,7 @@ class ParameterEstimator:
             D_all_clipped = np.sort(np.concatenate(self._d_all_clipped))
             kmeans = skcl.KMeans(n_clusters=self._N_level, random_state=0).fit(np.log(D_all_clipped).reshape(-1, 1))
         else:
-            kmeans = skcl.KMeans(n_clusters=self._N_level, random_state=0).fit(np.log(D_all).reshape(-1, 1))
+            kmeans = skcl.KMeans(n_clusters=self._N_level, random_state=0).fit((D_all).reshape(-1, 1))
 
         cluster_centroid = np.sort(np.exp(kmeans.cluster_centers_)[:, 0])[::-1]
 
@@ -171,4 +180,10 @@ class ParameterEstimator:
             min_pos_d = 0
 
         self._intervals = centroid_to_intervals(cluster_centroid, min_pos_d, self._fne)
-        return self._intervals
+        if not return_eigenvalues and not return_eigenvectors:
+            return self._intervals
+        elif (not return_eigenvectors) and (return_eigenvalues):
+            return D_all, self._intervals 
+        else: 
+            return D_all,self._v, self._intervals  
+

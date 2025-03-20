@@ -61,8 +61,9 @@ class VisibilityMatrix(array.LabeledMatrix):
         # Apply normalized spectrum weights if provided
         nz_vis = np.count_nonzero(data)
         if weight_spectrum is not None:
+            #print (f"before\n{data[0]}")
             data *= weight_spectrum / np.sum(weight_spectrum) * nz_vis
-
+            #print (f"after\n{data[0]}")
         super().__init__(data, beam_idx, beam_idx)
 
 

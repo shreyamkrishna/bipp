@@ -337,10 +337,13 @@ class MeasurementSet:
                     for i in range(0, (chunk[1] - chunk[0] + 1)):
                         S.fill(0)
                         S[ant2, ant1] = data[:, i].conj()
+                        S[ant1, ant2] = data[:, i] #######################
                         if weight_spectrum is not None and np.any(weight[:, i]):
                             WS.fill(0)
                             WS[ant2, ant1] = weight[:, i]
-                            vis_mat = vis.VisibilityMatrix(S, beam_idx, check_hermitian=False, weight_spectrum=WS)
+                            WS[ant1, ant2] = weight[:, i] ################
+                            #vis_mat = vis.VisibilityMatrix(S, beam_idx, check_hermitian=False, weight_spectrum=WS)
+                            vis_mat = vis.VisibilityMatrix(S, beam_idx, check_hermitian=False)
                         else:
                             vis_mat = vis.VisibilityMatrix(S, beam_idx, check_hermitian=False)
 
@@ -373,11 +376,14 @@ class MeasurementSet:
 
                     S.fill(0)
                     S[ant2, ant1] = data[:, 0].conj()
+                    S[ant1, ant2] = data[:, 0] #######################
 
                     if weight_spectrum is not None and np.any(weight):
                         WS.fill(0)
                         WS[ant2, ant1] = weight[:, 0]
-                        vis_mat = vis.VisibilityMatrix(S, beam_idx, check_hermitian=False, weight_spectrum=WS)
+                        WS[ant1, ant2] = weight[:, 0] ################
+                        #vis_mat = vis.VisibilityMatrix(S, beam_idx, check_hermitian=False, weight_spectrum=WS)
+                        vis_mat = vis.VisibilityMatrix(S, beam_idx, check_hermitian=False)
                     else:
                         vis_mat = vis.VisibilityMatrix(S, beam_idx, check_hermitian=False)
 
@@ -470,7 +476,7 @@ class MeasurementSet:
             data_flag = np.any(data_flag[:, :, [0, 3]], axis=2)[:, channel_id]
 
             # Set broken visibilities to 0
-            data[data_flag] = 0
+            #data[data_flag] = 0
 
             # DataFrame description of visibility data.
             # Each column represents a different channel.

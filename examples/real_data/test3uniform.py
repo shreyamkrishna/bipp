@@ -1,8 +1,5 @@
 """
 Script using pythons argparse to run bipp on real data sets. 
-# S (from measurement_set.py or earlier) check 
-# S from data gives identical image. S from measurement_set.py gives damped image. Only real change is weighting by WEIGHT_SPECTRUM WHY? 
-# indices check 
 """
 
 import argparse
@@ -27,15 +24,11 @@ import bipp.measurement_set as measurement_set
 import time as tt
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from matplotlib.ticker import AutoMinorLocator
 from matplotlib.colors import TwoSlopeNorm
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import subprocess
 from tqdm import tqdm
-import casacore.tables as ct
-import os
-import scipy.linalg
 
 
 
@@ -164,10 +157,7 @@ if (args.partition==None):
 
 if (args.timestep==None):
     timeStart = 0
-    timeEnd = 8 # for MWA_CenA_Dataset
-    #timeEnd = -1 # generally, but skips last timestep
-    #timeEnd = 900 # for LOFAR gauss 4 dataset
-    #timeEnd = 60 # for simulated SKALow WL dataset
+    timeEnd = -1
 else:
     [timeStart, timeEnd] = np.array(args.timestep.split(","), dtype=np.int32)
 
@@ -249,7 +239,7 @@ filter_negative_eigenvalues= False
 
 std_img_flag = True # put to true if std is passed as a filter
 
-plotList= np.array([3]) # 3 is eigenvalue historgram , 4 is visibility output
+plotList= np.array([3,])
 
 outputCustomFitsFile = True
 # 1 is Gram Matrix plotted via imshow
@@ -257,6 +247,10 @@ outputCustomFitsFile = True
 #######################################################################################################################################################
 # Observation set up ########################################################################################
 #######################################################################################################################################################
+
+#ms = measurement_set.MwaMeasurementSet(ms_file)
+#N_antenna = 128 # change this to get this from measurement set
+#N_station = 128
 
 if (channelEnd - channelStart == 1): 
     frequency = ms.channels["FREQUENCY"][channelStart:channelEnd]
@@ -266,10 +260,11 @@ if (channelEnd - channelStart == 1):
 else:
     frequency = ms.channels["FREQUENCY"][channelStart] + (ms.channels["FREQUENCY"][channelEnd] - ms.channels["FREQUENCY"][channelStart])/2
     channel_id = np.arange(channelStart, nChannel, dtype = np.int32)
-    print (f"Multi-channel mode with {nChannel} channels.")
+    print (f"Multi-channel mode with {channelEnd - channelStart}channels.")
 
 
 wl = constants.speed_of_light / frequency.to_value(u.Hz)
+wlg = constants.speed_of_light / frequency.to_value(u.Hz)
 print (f"wl:{wl}; f: {frequency}")
 
 if (args.grid == "ms"):
@@ -316,7 +311,14 @@ opt.set_collect_group_size(None)
 #opt.set_local_uvw_partition(bipp.Partition.none()) # Commented out
 opt.set_local_image_partition(bipp.Partition.grid([1,1,1]))
 opt.set_local_uvw_partition(bipp.Partition.grid([args.partition,args.partition,1]))
-opt.set_normalize_image_by_nvis(True)
+
+# to activate/desactivate for natural/uniform weighting
+#################################################################
+opt.set_normalize_image_by_nvis(False)
+opt.set_normalize_image(False)
+################################################################
+
+
 #opt.set_local_image_partition(bipp.Partition.auto())
 #opt.set_local_uvw_partition(bipp.Partition.auto())
 print("N_pix = ", args.npix)
@@ -329,180 +331,25 @@ print (f"Initial set up takes {tt.time() - start_time} s")
 ### Intensity Field  Parameter Estimation ##############################################
 ########################################################################################
 pe_t = tt.time()
-UVW_baselines = []
-visibilities = []
-times = []
-frequencies=[]
-sumofS = 0
 print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@ PARAMETER ESTIMATION @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n")
-I_est = bb_pe.ParameterEstimator(args.nlevel, sigma=1, ctx=ctx, fne=False)
+num_time_steps = 0
+I_est = bb_pe.ParameterEstimator(args.nlevel, sigma=1, ctx=ctx)
 for t, f, S in ProgressBar(
-        ms.new_visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 50), column=args.column)
 ):
     wl = constants.speed_of_light / f.to_value(u.Hz)
     XYZ = ms.instrument(t)
 
     W = ms.beamformer(XYZ, wl)
     G = gram(XYZ, W, wl)
-
-    UVW_baselines_t = ms.instrument.baselines(t, uvw=True, field_center=ms.field_center)
-    uvw = frame.reshape_and_scale_uvw(wl, UVW_baselines_t)
-    UVW_baselines.append(uvw)
-    visibilities.append(S.data.copy())
-    times.append(t.value)
-    frequencies.append(f.value)
-    sumofS+= np.sum(S.data)
-    
-
+    S, _ = measurement_set.filter_data(S, W)
     I_est.collect(wl, S.data, W.data, XYZ.data)
+    num_time_steps +=1
 
-print (sumofS)
-
-Eigs, V, intervals = I_est.infer_parameters(return_eigenvalues=True, return_eigenvectors=True)
-
-if (clusteringBool == False) :
-    intervals = clustering
-    
-print (f"Eigs {Eigs} \nIntervals: {intervals}")
-if (1 in plotList):
-    print ("Saving Gram Matrix")
-    fig, ax = plt.subplots(1,1, figsize = (20,20))
-    gramScale = ax.imshow(np.abs(G.data) + 1e-5, cmap='cubehelix', norm=LogNorm())
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size = "5%", pad = 0.05)
-    cbar = plt.colorbar(gramScale, cax)
-    cbar.set_label('Magnitude', rotation=270, labelpad=40)
-
-    ax.set_title("SKA Low Gram Matrix")
-    ax.set_xlabel("Antenna Index")
-    ax.set_ylabel("Antenna Index")
-    fig.savefig(f"{args.output}_gram.png")
-    fig.savefig(f"{args.output}_gram.pdf")
-
-if (3 in plotList):
-    print ("Saving Eigenvalue Histogram")
-    fig, ax = plt.subplots(1,1, figsize=(20,20))
-    ax.hist((Eigs), bins=2000) 
-    ax.set_title("Eigenvalue Histogram")
-    ax.set_xlabel(r'$\lambda$')
-    ax.set_ylabel("Count")
-    
-    eigenvalue_binEdges = np.sort(np.unique(np.array(intervals))) [1:-1]  # select all but first and last bin edge (0 and 3e34)
-
-    for eigenvalue_binEdge in eigenvalue_binEdges:
-        ax.axvline((eigenvalue_binEdge), color="r")
-
-    ax.xaxis.set_minor_locator(AutoMinorLocator(10))
-
-    fig.tight_layout()
-    fig.savefig(f"{args.output}_EigHist.png")
-    np.save(args.output+"_Eigs.npy", Eigs)
-
-print(f"Number of Eigenvalues={Eigs.shape[0]} intervals={intervals}")
-
+intervals = I_est.infer_parameters()
 fi = bipp.filter.Filter(lsq=intervals, std=intervals)
 
-############################# VISIBILITY OUTPUT FROM HERE #####################################################################################
-### Order of complexity of datasets: WL, 4gauss, cenA, Solar
-## 0132 works for OSKAR SKALow Datasets
-# FoV of datasets (deg): 0.05, 4.26, 11.37, 14.3
-# scale of datasets (1024 pixels image; arc seconds): 0.0879, 14.9766, 39.9727, 50.2734 
-#wsclean -name WL1000_200MHz -size 2000 2000 -scale 0.0879asec -multiscale -auto-threshold 1 -auto-mask 3 -mgain 0.8 -niter 1000000 -verbose -weight natural WL1000_200MHz_0h10m.ms/  2>&1|tee WL1000_200MHz.log
-#
-ms_input=args.ms_file
 
-visibilities = np.array(visibilities, dtype=complex)
-print (f"sum of visibilities :{np.sum(visibilities)}")
-
-times = np.array(times)
-frequencies = np.array(frequencies)
-uniqueTimes = np.unique(times)
-uniqueFrequencies = np.unique(frequencies)
-
-print (f"Visibilities shape {visibilities.shape},  nonzero visibilities = {np.count_nonzero(visibilities)}")
-print (f"Unique time steps :{np.size(uniqueTimes)} Unique frequencies: {np.size(uniqueFrequencies)}")
-
-Eigs = np.array(Eigs)
-Eigs = Eigs.reshape(-1, N_antenna)
-V = np.array(V, dtype=complex)
-print (f"V shape: {V.shape}\nEigs shape: {Eigs.shape}")
-
-if (args.telescope.lower()=="mwa"):
-    Nvis = N_antenna*(N_antenna-1)//2 + N_antenna
-    triu_indices = np.triu_indices(N_antenna, k=0) 
-elif (args.telescope.lower()=="skalow"):
-    Nvis = N_antenna*(N_antenna-1)//2
-    triu_indices = np.triu_indices(N_antenna, k=1)
-
-BIPP_Vis=np.zeros((args.nlevel, 0, Nvis))
-
-for i in np.arange(Eigs.shape[0]):
-    # select the eigenvalues and eigenvector corresponding to a particular time, frequency
-    visibilities_t0 = visibilities[i, :,:]
-
-    Eigs_t0, V_t0 = scipy.linalg.eigh(visibilities_t0)
-
-    BIPP_Vis_levels = np.zeros((0, Nvis)) 
-
-    for lvl, (binStart, binEnd) in enumerate(intervals):
-        
-        Eigs_levels = Eigs_t0.ravel()
-        V_levels = V_t0
-        
-        # filter the eigenvalues and eigenvectors by user input bins
-        V_levels = V_levels[:,(Eigs_levels<binEnd) & (Eigs_levels>=binStart)]
-        Eigs_levels = Eigs_levels[(Eigs_levels<binEnd) & (Eigs_levels>=binStart)]
-
-        # calculate NAntenna x NAntenna correlation matrix of antennas with eigenvectors
-        lvl_Vis = (V_levels @ np.diag(Eigs_levels)@V_levels.conj().T).reshape(1, N_antenna, N_antenna) 
-
-        # Take upper triangle of values (full array is redundant)
-        lvl_Vis_unique = lvl_Vis[:, triu_indices[0], triu_indices[1]] # collect upper half of matrix
-        lvl_Vis_unique = lvl_Vis_unique.reshape(1, -1)#N_antenna*(N_antenna - 1) //2) # reshape into 1, Nbaselines shape
-
-        # append to array storing level visibilities for each time step; Nlevel, NBaselines
-        BIPP_Vis_levels = np.append(BIPP_Vis_levels, lvl_Vis_unique, axis = 0)
-    # Nlevel, NFrequencies*NTimes, NBaselines
-    BIPP_Vis = np.append(BIPP_Vis, BIPP_Vis_levels.reshape(args.nlevel, 1, -1), axis =1) 
-
-#"""
-if (args.telescope.lower() == "mwa"):
-    BIPP_Vis = BIPP_Vis.reshape(args.nlevel, 8, 14, -1)
-elif (args.telescope.lower()=="skalow"):
-    BIPP_Vis = BIPP_Vis.reshape(args.nlevel, 60, nChannel, -1) # For OSKAR SKALow Dataset - WORKS
-
-BIPP_Vis = np.transpose(BIPP_Vis, (0, 1, 3, 2)) # nlevel, ntime, nbaselines, nchannel # THIS WORKS FOR OSKAR SKALow Datasets
-BIPP_Vis = BIPP_Vis.reshape(BIPP_Vis.shape[0],BIPP_Vis.shape[1]*BIPP_Vis.shape[2], BIPP_Vis.shape[3])
-
-for lvl in np.arange(args.nlevel):
-    # Create output MS file    
-    ms_output = ms_input.replace('.ms', f'_lvl{lvl}.ms')
-    if not (os.path.exists(ms_output)):
-        os.system('cp -r %s %s' %(ms_input, ms_output))
-    else:
-        # If MS file already exists, delete and then create output ms file
-        os.system(f'rm -rf {ms_output}')
-        os.system('cp -r %s %s' %(ms_input, ms_output))
-        print(' folder %s exists, deleting and recopying.' %ms_output)
-
-    ms_op = ct.table(ms_output, ack=False, readonly=False)
-
-    vis_data = ms_op.getcol('DATA')
-    print (f"MS Visibility Data shape: {vis_data.shape}") #66048,16,4 :: Ntime*Nbaseline, Nfrequency, Npol
-    print (f"BIPP Visibility Data shape: {BIPP_Vis.shape}") #1, 66048, 14 :: NLevel, Ntime*Nbaseline, Nfrequency
-
-    if (args.telescope.lower() == "skalow"):
-        vis_data[:, :, 0] = BIPP_Vis[lvl,:,:]
-        vis_data[:, :, 3] = BIPP_Vis[lvl,:,:]
-    elif (args.telescope.lower() == "mwa"):
-        vis_data[:, 1:15, 0] = BIPP_Vis[lvl,:,:]
-        vis_data[:, 1:15, 3] = BIPP_Vis[lvl,:,:]
-    
-    ms_op.putcol('DATA', vis_data)
-    ms_op.close()
-#"""
-
-############################# VISIBILITY OUTPUT ENDS HERE #####################################################################################
 
 
 ########################################################################################
@@ -519,8 +366,79 @@ imager = bipp.NufftSynthesis(
     lmn_grid[2],
     precision,
 )
+##########################################################################
+###########################
+def gridding(N, du, u, v):
+    grid_start = -N//2 * du
+    grid_end = N//2 * du
+    xedges = np.linspace(grid_start, grid_end, N+1)
+    yedges = np.linspace(grid_start, grid_end, N+1)
+    counts, _, _ = np.histogram2d(u, v, bins=[xedges, yedges])
+    with np.errstate(divide='ignore', invalid='ignore'):
+        inv_counts = np.true_divide(1, counts)
+        inv_counts[~np.isfinite(inv_counts)] = 0
+    return xedges, yedges, counts, inv_counts
 
 
+def weighting(u, v, xedges, yedges, counts):
+    x_idx = np.digitize(u, xedges) - 1
+    y_idx = np.digitize(v, yedges) - 1
+    x_idx = np.clip(x_idx, 0, len(xedges)-2)
+    y_idx = np.clip(y_idx, 0, len(yedges)-2)
+    assigned_weights = counts[x_idx, y_idx]
+    for i in range(len(u)):
+        if u[i]<xedges[0] or u[i]>xedges[-1] or v[i]<yedges[0] or v[i]>yedges[-1]:
+            assigned_weights[i] = 0.0
+    return assigned_weights  
+
+
+##########################################################################
+###########################
+
+###################### extract uv
+print('getting uv')
+uu = []
+vv = []
+for t, f, S in ProgressBar(
+        ms.visibilities(channel_id=channel_id, time_id=slice(timeStart, timeEnd, 1), column=args.column)
+):
+    wl = constants.speed_of_light / f.to_value(u.Hz)
+    UVW_baselines_t = ms.instrument.baselines(t, uvw=True, field_center=ms.field_center)
+    uvw = frame.reshape_and_scale_uvw(wl, UVW_baselines_t)
+    ut, vt, wt = uvw.T
+    uu.extend(ut)
+    vv.extend(vt)
+    
+uu = np.array(uu)
+vv = np.array(vv)
+
+###################### gridding
+print('len uu=', len(uu))
+
+print('max u = ',np.max(uu))
+print('min u = ',np.min(uu))
+
+N = args.npix
+fov = args.fov
+print('N = ',N)
+print('fov rad = ', fov)
+
+
+print('wl = ', wlg)
+du = 1/fov * wlg
+print('du = ',du)
+print('gridding')
+xedges, yedges, counts, inv_counts  = gridding(N, du, uu, vv)
+print('max xedges = ', np.max(xedges))
+print('max yedges = ', np.max(yedges))
+
+ww = weighting(uu, vv, xedges, yedges, inv_counts)
+n_factor = float(np.count_nonzero(counts))
+print("non zero cells = ",n_factor)
+
+print('sum of the weights = ', np.sum(ww))
+
+W_glob = 0
 #########################################################################################
 ###########################
 for t, f, S in ProgressBar(
@@ -530,12 +448,28 @@ for t, f, S in ProgressBar(
     wl = constants.speed_of_light / f.to_value(u.Hz)
     XYZ = ms.instrument(t)
     W = ms.beamformer(XYZ, wl)
+    S, W = measurement_set.filter_data(S, W)
 
     UVW_baselines_t = ms.instrument.baselines(t, uvw=True, field_center=ms.field_center)
     uvw = frame.reshape_and_scale_uvw(wl, UVW_baselines_t)
     if np.allclose(S.data, np.zeros(S.data.shape)):
         continue
-    imager.collect(wl, fi, S.data, W.data, XYZ.data, uvw)
+    ##### un comment for natural weighting
+    #imager.collect(wl, fi, S.data, W.data, XYZ.data, uvw)
+
+    ###################### weighting the visibility with the grid
+    new_S = S.data.T.reshape(-1, order="F")
+    ut, vt, wt = uvw.T
+    w = weighting(ut, vt, xedges, yedges, inv_counts)
+    W_glob += np.sum(w)
+    #### un comment for getting the psf
+    #new_S = np.full(new_S.shape, 1 + 1j)*w#new_S*w
+    new_S = new_S*w
+    new_S = new_S.reshape((S.data.shape[0], S.data.shape[0]), order="F").T
+    imager.collect(wl, fi, new_S, W.data, XYZ.data, uvw)
+    
+print("sum of w=",W_glob)
+
 
 images = imager.get().reshape((-1, args.npix, args.npix))
 
@@ -548,11 +482,14 @@ I_std_eq = s2image.Image(std_image, xyz_grid)
 
 print("lsq_image.shape =", lsq_image.shape)
 
-print (I_lsq_eq.data.mean())
-
 #############################################
 I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2], lsq_image.shape[-1]).sum(axis = 0), xyz_grid)
 
+# I_lsq_eq_summed should be divided b W_glob
+# I_lsq_eq_summed = I_lsq_eq_summed / W_glob
+# but it returns the error:
+# TypeError: unsupported operand type(s) for /: 'Image' and 'float'
+# Instead do it manually after 
 
 
 
@@ -571,65 +508,58 @@ I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2
 ########################################## Plotting and output of .fits file #####################################################
 ####################################################################################################################################
 
-pf_t = tt.time()
+#pf_t = tt.time()
 
-lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
+#lsq_levels = I_lsq_eq.data  # Nlevel, Npix, Npix
 
-lsq_image = lsq_levels.sum(axis = 0)
+#lsq_image = lsq_levels.sum(axis = 0)
 
 if (outputCustomFitsFile):
 
-    w = awcs.WCS(naxis=4)
+    w = awcs.WCS(naxis=2)
 
-    w.wcs.crpix = np.array([args.npix//2 + 1, args.npix//2 + 1, 1, 1])
-    w.wcs.cdelt = np.array([-np.rad2deg(args.fov)/args.npix, np.rad2deg(args.fov)/args.npix, 1.0, 1.0])
-    w.wcs.crval = np.array([field_center.ra.deg, field_center.dec.deg, frequency.value, 1])
-    w.wcs.ctype = ["RA---SIN", "DEC--SIN", "FREQ", "STOKES"]
+    
+    w.wcs.crpix = np.array([args.npix//2 + 1, args.npix//2 + 1])
+    w.wcs.cdelt = np.array([-np.rad2deg(args.fov)/args.npix, np.rad2deg(args.fov)/args.npix])
+    w.wcs.crval = np.array([field_center.ra.deg, field_center.dec.deg])
+    w.wcs.ctype = ["RA---SIN", "DEC--SIN"]
 
     header = w.to_header()
-    hdu =fits.PrimaryHDU(np.flipud(I_lsq_eq_summed.data).reshape(1, 1, I_lsq_eq_summed.data.shape[1],I_lsq_eq_summed.data.shape[2]),header=header)
+    hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq_summed.data),header=header)
 
+    #hdu.header['SIMPLE'] = "T" # fits compliant format
     if (precision.lower()=='double'):
         hdu.header['BITPIX']=-64 # double precision float
     elif (precision.lower()=='single'):
         hdu.header['BITPIX']=-32 # single precision float
-    hdu.header['NAXIS'] = 4 # Number of axes - 2 for image data, 3 for data cube
-    hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2] # length of data axis 1
-    hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1] # length of data axis 2
-    hdu.header['NAXIS3'] = 1 # length of data axis 3
-    hdu.header['NAXIS4'] = 1 # length of data axis 4
-    hdu.header["TELESCOP"] = args.telescope  # Telescope name
-    hdu.header["OBSERVER"] = "Astronomer"  # Observer name
+    hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
+    hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
+    hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
     #shdu.header['EXTEND'] = "T" # Fits data set may contain extensions
-    hdu.header['BSCALE'] = 1.0 # scale to be multiplied by the data array values when reading the FITS file
-    hdu.header['BZERO'] = 0.0 # zero offset to be added to the data array values when reading the FITS file
-    hdu.header['BUNIT'] = 'JY/BEAM' # Units of the data array
+    hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
+    hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
+    hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
     hdu.header['BTYPE'] = 'Intensity'
     hdu.header['ORIGIN'] = "BIPP"
     hdu.header['HISTORY'] = sys.argv[:]
 
-
     hdu.writeto(f"{args.output}_summed.fits", overwrite=True)
 
     for i in np.arange(args.nlevel):
-        hdu =fits.PrimaryHDU(np.flipud(I_lsq_eq.data[i, :, :]).reshape(1, 1, I_lsq_eq.data.shape[1],I_lsq_eq.data.shape[2]),header=header)
+        hdu =fits.PrimaryHDU(np.fliplr(I_lsq_eq.data[i, :, :]),header=header)
 
         #hdu.header['SIMPLE'] = 'T' # fits compliant format
         if (precision.lower()=='double'):
             hdu.header['BITPIX']=-64 # double precision float
         elif (precision.lower()=='single'):
             hdu.header['BITPIX']=-32 # single precision float
-        hdu.header['NAXIS'] = 4 # Number of axes - 2 for image data, 3 for data cube
-        hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2] # length of data axis 1
-        hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1] # length of data axis 2
-        hdu.header['NAXIS3'] = 1 # length of data axis 3
-        hdu.header['NAXIS4'] = 1 # length of data axis 4
-        hdu.header["TELESCOP"] = args.telescope  # Telescope name
-        hdu.header["OBSERVER"] = "Astronomer"  # Observer name
+        hdu.header['NAXIS'] = 2 # Number of axes - 2 for image data, 3 for data cube
+        hdu.header['NAXIS1'] = I_lsq_eq_summed.shape[-2]
+        hdu.header['NAXIS2'] = I_lsq_eq_summed.shape[-1]
         #shdu.header['EXTEND'] = "T" # Fits data set may contain extensions
-        hdu.header['BSCALE'] = 1.0 # scale to be multiplied by the data array values when reading the FITS file
-        hdu.header['BZERO'] = 0.0 # zero offset to be added to the data array values when reading the FITS file
-        hdu.header['BUNIT'] = 'JY/BEAM' # Units of the data array
+        hdu.header['BSCALE'] = 1 # scale to be multiplied by the data array values when reading the FITS file
+        hdu.header['BZERO'] = 0 # zero offset to be added to the data array values when reading the FITS file
+        hdu.header['BUNIT'] = 'Jy/Beam' # Units of the data array
         hdu.header['BTYPE'] = 'Intensity'
         hdu.header['ORIGIN'] = "BIPP"
         hdu.header['HISTORY'] = sys.argv[:]
@@ -641,64 +571,8 @@ else:
     I_lsq_eq.to_fits(f"{args.output}_lvls.fits")
 
 
-fig, ax = plt.subplots(1, args.nlevel+1, figsize = (20*(args.nlevel+1), 20))
 
-if (std_img_flag):
 
-    fig, ax = plt.subplots(2, args.nlevel+1, figsize=(20*(args.nlevel + 1), 40))
 
-    std_levels = I_std_eq.data  # Nlevel, Npix, Npix
 
-    std_image = std_levels.sum(axis = 0)
 
-    # Plot Std Summed Image
-    stdScale = ax[1,0].imshow(std_image,cmap ='cubehelix')
-    ax[1, 0].set_title("BB STD")
-    ax[1, 0].axis('off')
-    divider = make_axes_locatable(ax[1, 0])
-    cax = divider.append_axes("right", size = "5%", pad = 0.05)
-    cbar = plt.colorbar(stdScale, cax)
-    cbar.set_label('Flux (JY/BEAM)', rotation=270, labelpad=40)
-    cbar.formatter.set_powerlimits((0, 0))
-    cbar.formatter.set_useMathText(True)
-
-    # Plot Std Level Images  
-    for i in np.arange(args.nlevel):
-        stdScale = ax[1, i+1].imshow(std_levels[i, :, :],cmap ='cubehelix')
-        ax[1, i+1].set_title(f"STD {i}")
-        ax[1, i+1].axis('off')
-        divider = make_axes_locatable(ax[1, i+1])
-        cax = divider.append_axes("right", size = "5%", pad = 0.05)
-        cbar = plt.colorbar(stdScale, cax)
-        cbar.set_label('Flux (JY/BEAM)', rotation=270, labelpad=40)
-        cbar.formatter.set_powerlimits((0, 0))
-        cbar.formatter.set_useMathText(True)
-
-# Plot Lsq Summed Image
-
-lsqScale = ax[0, 0].imshow(lsq_image, cmap ='cubehelix')
-ax[0, 0].set_title("BIPP least-squares Image")
-ax[0, 0].axis('off')
-divider = make_axes_locatable(ax[0, 0])
-cax = divider.append_axes("right", size = "5%", pad = 0.05)
-cbar = plt.colorbar(lsqScale, cax)
-cbar.set_label('Flux (JY/BEAM)', rotation=270, labelpad=40)
-cbar.formatter.set_powerlimits((0, 0))
-cbar.formatter.set_useMathText(True)
-
-# Plot Lsq Level Image
-for i in np.arange(args.nlevel):
-    lsqScale = ax[0, i+1].imshow(lsq_levels[i, :, :], cmap='cubehelix')
-    ax[0, i+1].set_title(f"BIPP Image Level {i}")
-    ax[0, i+1].axis('off')
-    divider = make_axes_locatable(ax[0, i+1])
-    cax = divider.append_axes("right", size = "5%", pad = 0.05)
-    cbar = plt.colorbar(lsqScale, cax)
-    cbar.set_label('Flux (JY/BEAM)', rotation=270, labelpad=40)
-    cbar.formatter.set_powerlimits((0, 0))
-    cbar.formatter.set_useMathText(True)
-
-fig.savefig(f"{args.output}.png")
-
-print (f"Plotting and fits output time:{tt.time() - pf_t} s")
-print (f"Total time: {tt.time()- start_time} s")
