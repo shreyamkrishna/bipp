@@ -1,8 +1,5 @@
 """
 Script using pythons argparse to run bipp on real data sets. 
-# S (from measurement_set.py or earlier) check 
-# S from data gives identical image. S from measurement_set.py gives damped image. Only real change is weighting by WEIGHT_SPECTRUM WHY? 
-# indices check 
 """
 
 import argparse
@@ -28,6 +25,7 @@ import time as tt
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.ticker import AutoMinorLocator
+from matplotlib.ticker import LogLocator
 from matplotlib.colors import TwoSlopeNorm
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -362,8 +360,10 @@ Eigs, V, intervals = I_est.infer_parameters(return_eigenvalues=True, return_eige
 
 if (clusteringBool == False) :
     intervals = clustering
-    
+
+np.set_printoptions(threshold=np.inf)
 print (f"Eigs {Eigs} \nIntervals: {intervals}")
+np.set_printoptions()
 if (1 in plotList):
     print ("Saving Gram Matrix")
     fig, ax = plt.subplots(1,1, figsize = (20,20))
@@ -382,17 +382,20 @@ if (1 in plotList):
 if (3 in plotList):
     print ("Saving Eigenvalue Histogram")
     fig, ax = plt.subplots(1,1, figsize=(20,20))
-    ax.hist((Eigs), bins=2000) 
+    logBins = np.geomspace(np.abs(Eigs).min(),Eigs.max(), 100)
+    ax.hist((Eigs), bins=logBins, log=True) 
     ax.set_title("Eigenvalue Histogram")
     ax.set_xlabel(r'$\lambda$')
     ax.set_ylabel("Count")
+    ax.set_xscale('log')
     
     eigenvalue_binEdges = np.sort(np.unique(np.array(intervals))) [1:-1]  # select all but first and last bin edge (0 and 3e34)
 
     for eigenvalue_binEdge in eigenvalue_binEdges:
-        ax.axvline((eigenvalue_binEdge), color="r")
+        if eigenvalue_binEdge > 0: 
+            ax.axvline((eigenvalue_binEdge), color="r")
 
-    ax.xaxis.set_minor_locator(AutoMinorLocator(10))
+    ax.xaxis.set_minor_locator(LogLocator(base=10,subs=[1,2,3,4,5,6,7,8,9]))
 
     fig.tight_layout()
     fig.savefig(f"{args.output}_EigHist.png")
@@ -552,20 +555,6 @@ print (I_lsq_eq.data.mean())
 
 #############################################
 I_lsq_eq_summed = s2image.Image(lsq_image.reshape(args.nlevel,lsq_image.shape[-2], lsq_image.shape[-1]).sum(axis = 0), xyz_grid)
-
-
-
-
-# same thing fo standardize image
-#if (std_img_flag):
-#    std_image = imager.get("STD").reshape((-1, args.npix, args.npix))
-#    if (filter_negative_eigenvalues):
-#        I_std_eq = s2image.Image(std_image.reshape(args.nlevel + 1, std_image.shape[-2], lsq_image.shape[-1]), xyz_grid)
-#    else:
-#        I_std_eq = s2image.Image(std_image.reshape(args.nlevel, std_image.shape[-2], std_image.shape[-1]), xyz_grid)
-
-    
-#    print("std_image.shape =", std_image.shape)
 
 ####################################################################################################################################
 ########################################## Plotting and output of .fits file #####################################################
